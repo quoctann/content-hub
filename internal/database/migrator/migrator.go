@@ -1,0 +1,53 @@
+package migrator
+
+import (
+	"fmt"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+)
+
+// GolangMigrateAdapter implements the domain.Migrator interface
+// using the github.com/golang-migrate/migrate library.
+type GolangMigrateAdapter struct {
+	m *migrate.Migrate
+}
+
+// NewGolangMigrateAdapter creates a new adapter instance.
+func NewGolangMigrateAdapter(databaseURL string, migrationsPath string) (*GolangMigrateAdapter, error) {
+	m, err := migrate.New(
+		"file://"+migrationsPath,
+		databaseURL,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize migrator: %w", err)
+	}
+	return &GolangMigrateAdapter{m: m}, nil
+}
+
+// Up runs all pending migrations up.
+func (mig *GolangMigrateAdapter) Up() error {
+	if err := mig.m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+	return nil
+}
+
+// Down rolls back the most recent migration.
+func (mig *GolangMigrateAdapter) Down() error {
+	if err := mig.m.Down(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+	return nil
+}
+
+// Force sets the migration version.
+func (mig *GolangMigrateAdapter) Force(version int) error {
+	return mig.m.Force(version)
+}
+
+// Version returns the current migration version and dirty status.
+func (mig *GolangMigrateAdapter) Version() (uint, bool, error) {
+	return mig.m.Version()
+}

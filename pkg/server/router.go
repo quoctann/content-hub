@@ -1,0 +1,52 @@
+package server
+
+import "net/http"
+
+// Router defines a framework‑agnostic HTTP router interface (the *port*).
+// Handlers receive a Context that abstracts the underlying request/response.
+// This allows us to swap Gin, Echo, Fiber, etc. without touching the
+// bootstrap or use‑case layers.
+
+type Router interface {
+	// GET registers a handler for HTTP GET requests.
+	GET(path string, handler HandlerFunc)
+	// POST registers a handler for HTTP POST requests.
+	POST(path string, handler HandlerFunc)
+	// PUT registers a handler for HTTP PUT requests.
+	PUT(path string, handler HandlerFunc)
+	// DELETE registers a handler for HTTP DELETE requests.
+	DELETE(path string, handler HandlerFunc)
+	// Group creates a sub‑router with a common prefix.
+	Group(path string) RouterGroup
+}
+
+// RouterGroup is a sub‑router that can also register middleware.
+type RouterGroup interface {
+	GET(path string, handler HandlerFunc)
+	POST(path string, handler HandlerFunc)
+	PUT(path string, handler HandlerFunc)
+	DELETE(path string, handler HandlerFunc)
+	// Use registers one or more middleware functions for this group.
+	Use(middleware ...MiddlewareFunc)
+}
+
+// Context abstracts the request/response handling.
+// It mirrors a subset of gin.Context that we need for our handlers.
+type Context interface {
+	// Param returns a path parameter (e.g. ":id").
+	Param(key string) string
+	// Query returns a query string parameter.
+	Query(key string) string
+	// Bind parses the request body into the provided struct.
+	Bind(obj interface{}) error
+	// JSON writes a JSON response with the given HTTP status code.
+	JSON(code int, obj interface{})
+	// Request returns the underlying *http.Request.
+	Request() *http.Request
+}
+
+// HandlerFunc is the signature for route handlers.
+type HandlerFunc func(Context)
+
+// MiddlewareFunc is the signature for middleware.
+type MiddlewareFunc func(Context) (Context, error)

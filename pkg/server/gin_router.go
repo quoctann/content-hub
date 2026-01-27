@@ -1,0 +1,116 @@
+package server
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+// GinRouter implements the Router interface using the Gin framework.
+type GinRouter struct {
+	engine *gin.Engine
+}
+
+// NewGinRouter creates a new GinRouter instance.
+func NewGinRouter(engine *gin.Engine) *GinRouter {
+	return &GinRouter{engine: engine}
+}
+
+func (r *GinRouter) Engine() *gin.Engine {
+	return r.engine
+}
+
+func (r *GinRouter) GET(path string, handler HandlerFunc) {
+	r.engine.GET(path, wrapHandler(handler))
+}
+
+func (r *GinRouter) POST(path string, handler HandlerFunc) {
+	r.engine.POST(path, wrapHandler(handler))
+}
+
+func (r *GinRouter) PUT(path string, handler HandlerFunc) {
+	r.engine.PUT(path, wrapHandler(handler))
+}
+
+func (r *GinRouter) DELETE(path string, handler HandlerFunc) {
+	r.engine.DELETE(path, wrapHandler(handler))
+}
+
+func (r *GinRouter) Group(path string) RouterGroup {
+	return &GinRouterGroup{group: r.engine.Group(path)}
+}
+
+// GinRouterGroup implements the RouterGroup interface.
+type GinRouterGroup struct {
+	group *gin.RouterGroup
+}
+
+func (g *GinRouterGroup) GET(path string, handler HandlerFunc) {
+	g.group.GET(path, wrapHandler(handler))
+}
+
+func (g *GinRouterGroup) POST(path string, handler HandlerFunc) {
+	g.group.POST(path, wrapHandler(handler))
+}
+
+func (g *GinRouterGroup) PUT(path string, handler HandlerFunc) {
+	g.group.PUT(path, wrapHandler(handler))
+}
+
+func (g *GinRouterGroup) DELETE(path string, handler HandlerFunc) {
+	g.group.DELETE(path, wrapHandler(handler))
+}
+
+func (g *GinRouterGroup) Use(middleware ...MiddlewareFunc) {
+	for _, m := range middleware {
+		g.group.Use(wrapMiddleware(m))
+	}
+}
+
+// GinContext implements the Context interface.
+type GinContext struct {
+	ctx *gin.Context
+}
+
+func (c *GinContext) Param(key string) string {
+	return c.ctx.Param(key)
+}
+
+func (c *GinContext) Query(key string) string {
+	return c.ctx.Query(key)
+}
+
+func (c *GinContext) Bind(obj interface{}) error {
+	return c.ctx.ShouldBind(obj)
+}
+
+func (c *GinContext) JSON(code int, obj interface{}) {
+	c.ctx.JSON(code, obj)
+}
+
+func (c *GinContext) Request() *http.Request {
+	return c.ctx.Request
+}
+
+// Helper functions to wrap handlers and middleware
+
+func wrapHandler(h HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h(&GinContext{ctx: c})
+	}
+}
+
+func wrapMiddleware(m MiddlewareFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, err := m(&GinContext{ctx: c})
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if ctx != nil {
+			// In some cases we might want to update the context,
+			// but for Gin we usually just continue.
+		}
+		c.Next()
+	}
+}
