@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"time"
+
 	httpDelivery "github.com/quoctann/content-hub/internal/delivery/http"
 	"github.com/quoctann/content-hub/internal/repository/postgres"
 	"github.com/quoctann/content-hub/internal/usecase"
@@ -21,4 +23,9 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 	userRepo := postgres.NewUserRepo(deps.DBPool)
 	userUsecase := usecase.NewUserUsecase(userRepo)
 	httpDelivery.NewUserHandler(router, userUsecase)
+
+	// Setup Content module
+	contentRepo := postgres.NewContentRepo(deps.DBPool)
+	contentUsecase := usecase.NewContentUsecase(contentRepo, 5*time.Second)
+	httpDelivery.NewContentHandler(router, contentUsecase)
 }

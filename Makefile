@@ -45,10 +45,10 @@ migrate-create:
 
 migrate-force:
 	@if [ -z "$(version)" ]; then echo "Usage: make migrate-force version=1"; exit 1; fi
-	$(GOCMD) run ./cmd/database force -v $(version) -e local
+	$(GOCMD) run ./cmd/db force --version $(version) -e local
 
 migrate-version:
-	$(GOCMD) run ./cmd/database version -e local
+	$(GOCMD) run ./cmd/db version -e local
 
 help:
 	@echo "Available commands:"

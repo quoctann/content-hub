@@ -20,7 +20,7 @@ type Dependencies struct {
 // InitDependencies initializes all application dependencies.
 // It uses shared initialization logic and follows the fail‑fast principle.
 func InitDependencies(env string) (*Dependencies, error) {
-	l, err := shared.InitLogger()
+	l, err := shared.InitLogger(env)
 	if err != nil {
 		return nil, err
 	}

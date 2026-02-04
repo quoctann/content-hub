@@ -60,8 +60,14 @@ type zapLogger struct {
 }
 
 // NewZapLogger creates a new context-aware logger using Zap.
-func NewZapLogger() (ILogger, error) {
-	config := zap.NewProductionConfig()
+func NewZapLogger(env string) (ILogger, error) {
+	var config zap.Config
+	if env == "local" {
+		config = zap.NewDevelopmentConfig()
+		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	} else {
+		config = zap.NewProductionConfig()
+	}
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	l, err := config.Build(zap.AddCallerSkip(1))

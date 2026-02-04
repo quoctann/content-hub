@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/quoctann/content-hub/pkg/config"
 	"github.com/quoctann/content-hub/pkg/logger"
 )
@@ -30,6 +31,13 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 	poolConfig.MinConns = 2
 	poolConfig.MaxConnLifetime = time.Hour
 	poolConfig.MaxConnIdleTime = 30 * time.Minute
+
+	// Configure tracer
+	dbTracer := &tracelog.TraceLog{
+		Logger:   NewLoggerAdapter(l),
+		LogLevel: tracelog.LogLevelDebug,
+	}
+	poolConfig.ConnConfig.Tracer = dbTracer
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {

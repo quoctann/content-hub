@@ -1,5 +1,7 @@
 package domain
 
+// Clean-Arch: this is Port (Driver Port / Service Provider Interface)
+
 // Migrator defines the contract for database migration operations.
 // This is the *port* in the clean‑architecture sense – it has no external
 // dependencies and can be implemented by any migration library.

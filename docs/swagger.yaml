@@ -8,6 +8,50 @@ definitions:
       title:
         type: string
     type: object
+  domain.Content:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_deleted:
+        type: boolean
+      tags:
+        items:
+          $ref: '#/definitions/domain.Tag'
+        type: array
+      text:
+        type: string
+      title:
+        type: string
+      type:
+        $ref: '#/definitions/domain.ContentType'
+      updated_at:
+        type: string
+      url:
+        type: string
+    type: object
+  domain.ContentType:
+    enum:
+    - text
+    - image
+    type: string
+    x-enum-varnames:
+    - Text
+    - Image
+  domain.Tag:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_deleted:
+        type: boolean
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
   domain.User:
     properties:
       created_at:
@@ -18,9 +62,7 @@ definitions:
         type: integer
       name:
         type: string
-      password_hash:
-        type: string
-      phone:
+      password:
         type: string
       status:
         type: string
@@ -128,6 +170,114 @@ paths:
       summary: Get article by ID
       tags:
       - articles
+  /contents:
+    get:
+      consumes:
+      - application/json
+      description: Search contents by query text
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        type: string
+      - description: Number of results
+        in: query
+        name: num
+        type: integer
+      - description: Cursor for pagination
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.Content'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Search contents
+      tags:
+      - contents
+    post:
+      consumes:
+      - application/json
+      description: Store a new content
+      parameters:
+      - description: Content
+        in: body
+        name: content
+        required: true
+        schema:
+          $ref: '#/definitions/domain.Content'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.Content'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Store content
+      tags:
+      - contents
+  /contents/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Update existing content
+      parameters:
+      - description: Content ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Content
+        in: body
+        name: content
+        required: true
+        schema:
+          $ref: '#/definitions/domain.Content'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Content'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update content
+      tags:
+      - contents
   /health/live:
     get:
       description: Returns 200 if the application is running

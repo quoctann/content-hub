@@ -16,8 +16,4 @@ $$ language 'plpgsql';
 -- Search feature
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 CREATE EXTENSION IF NOT EXISTS "unaccent";
--- Function chuẩn hóa tiếng Việt
-CREATE OR REPLACE FUNCTION normalize_vietnamese(text)
-RETURNS text AS $$
-  SELECT lower(unaccent($1))
-$$ LANGUAGE sql IMMUTABLE;
+
