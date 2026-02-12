@@ -12,3 +12,8 @@ database:
   password: "postgres"
   name: "postgres"
   ssl_mode: "disable"
+  auto_migrate: true
+  migrations_path: "migrations"
+
+security:
+  api_key: "123"

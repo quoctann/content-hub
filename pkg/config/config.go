@@ -13,6 +13,7 @@ type Config struct {
 	Server   Server   `mapstructure:"server"`
 	Logger   Logger   `mapstructure:"logger"`
 	Database Database `mapstructure:"database"`
+	Security Security `mapstructure:"security"`
 }
 
 type Server struct {
@@ -34,6 +35,10 @@ type Database struct {
 	SSLMode        string `mapstructure:"ssl_mode"`
 	AutoMigrate    bool   `mapstructure:"auto_migrate"`
 	MigrationsPath string `mapstructure:"migrations_path"`
+}
+
+type Security struct {
+	APIKey string `mapstructure:"api_key"`
 }
 
 // isFileNotFoundError checks if the error indicates a file not found.

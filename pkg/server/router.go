@@ -28,6 +28,8 @@ type RouterGroup interface {
 	DELETE(path string, handler HandlerFunc)
 	// Use registers one or more middleware functions for this group.
 	Use(middleware ...MiddlewareFunc)
+	// Group creates a sub-router with a common prefix.
+	Group(path string) RouterGroup
 }
 
 // Context abstracts the request/response handling.

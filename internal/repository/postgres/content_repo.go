@@ -121,38 +121,52 @@ func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
 }
 
 func (r *contentRepo) Search(ctx context.Context, query string, cursor string, num int64) ([]domain.Content, error) {
-	// Simple search implementation
-	// Note: Fetching tags for each content
+	var offset int
+	if cursor != "" {
+		fmt.Sscanf(cursor, "%d", &offset)
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	limit := num
+	if limit <= 0 {
+		limit = 20 // Default limit
+	}
 
 	baseQuery := `
-		SELECT c.id, c.title, c.text, c.url, c.type
+		SELECT c.id, c.title, c.text, c.url, c.type, c.created_at, c.updated_at
 		FROM contents c
 	`
 	var args []interface{}
 	var conditions []string
+	argID := 1
 
 	if query != "" {
-		conditions = append(conditions, "search_vector @@ plainto_tsquery('simple', unaccent($1))")
+		// Use unaccent for both the document (in search_vector) and the query
+		// 'simple' dictionary is used to avoid stemming which might conflict with vietnamese unaccenting
+		conditions = append(conditions, fmt.Sprintf("search_vector @@ plainto_tsquery('simple', unaccent($%d))", argID))
 		args = append(args, query)
+		argID++
 	}
 
 	if len(conditions) > 0 {
 		baseQuery += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	// Order by rank if query is present
-	// Order by rank if query is present
+	// Order by rank if query is present, otherwise by created_at desc
 	if query != "" {
-		baseQuery += " ORDER BY ts_rank(search_vector, plainto_tsquery('simple', unaccent($1))) DESC"
-		// $1 is already bound, no need to append arg again
+		// Note: We need to pass the query again for ts_rank, or reuse parameter
+		// Since we append args, we can just refer to $1 if it's the first arg.
+		// However, to be safe with arg indices, let's reuse the index if we know precise structure.
+		// For simplicity, we just use the same logic. logic: $1 is the query.
+		baseQuery += fmt.Sprintf(" ORDER BY ts_rank(search_vector, plainto_tsquery('simple', unaccent($%d))) DESC, created_at DESC", 1)
+	} else {
+		baseQuery += " ORDER BY created_at DESC"
 	}
 
-	if num > 0 {
-		baseQuery += fmt.Sprintf(" LIMIT %d", num)
-	}
-
-	// Add limit/pagination logic if needed, skipping for brevity but standard implementation needed
-	// Assuming cursor is not implemented for now to keep it simple, or user didn't ask for Search specific
+	baseQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argID, argID+1)
+	args = append(args, limit, offset)
 
 	rows, err := r.db.Query(ctx, baseQuery, args...)
 	if err != nil {
@@ -167,20 +181,15 @@ func (r *contentRepo) Search(ctx context.Context, query string, cursor string, n
 
 	for rows.Next() {
 		var c domain.Content
-		err := rows.Scan(&c.ID, &c.Title, &c.Text, &c.URL, &c.Type)
+		err := rows.Scan(&c.ID, &c.Title, &c.Text, &c.URL, &c.Type, &c.CreatedAt, &c.UpdatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan failed: %w", err)
 		}
 		contents = append(contents, c)
-		// Store pointer to update tags later
 	}
 
-	// Because we append by value, we need to loop again or use pointers contentMap
-	// Let's refactor to use slice of pointers or re-iterate
-	// Easier: Just fetch simple without tags for now, or do a separate query.
-
 	if len(contents) > 0 {
-		// Populate IDs
+		// Populate IDs and Map
 		for i := range contents {
 			contentIDs = append(contentIDs, contents[i].ID)
 			contentMap[contents[i].ID] = &contents[i]
@@ -188,7 +197,7 @@ func (r *contentRepo) Search(ctx context.Context, query string, cursor string, n
 
 		// Fetch Tags
 		tagsQuery := `
-			SELECT ct.content_id, t.id, t.name
+			SELECT ct.content_id, t.id, t.name, t.created_at, t.updated_at
 			FROM tags t
 			JOIN content_tags ct ON t.id = ct.tag_id
 			WHERE ct.content_id = ANY($1)
@@ -202,8 +211,8 @@ func (r *contentRepo) Search(ctx context.Context, query string, cursor string, n
 		for tagRows.Next() {
 			var contentID int64
 			var t domain.Tag
-			if err := tagRows.Scan(&contentID, &t.ID, &t.Name); err != nil {
-				return nil, err
+			if err := tagRows.Scan(&contentID, &t.ID, &t.Name, &t.CreatedAt, &t.UpdatedAt); err != nil {
+				return nil, fmt.Errorf("tag scan failed: %w", err)
 			}
 			if c, ok := contentMap[contentID]; ok {
 				c.Tags = append(c.Tags, t)

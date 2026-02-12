@@ -12,3 +12,6 @@ database:
   password: "postgres"
   name: "postgres"
   ssl_mode: "disable"
+
+security:
+  api_key: "123"

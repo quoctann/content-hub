@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/quoctann/content-hub/internal/database/migrator"
 )
@@ -28,10 +27,8 @@ func RunMigrations(deps *Dependencies) error {
 		migrationsPath = "migrations"
 	}
 
-	// Add "file://" prefix if not present, as required by golang-migrate
-	if !strings.HasPrefix(migrationsPath, "file://") {
-		migrationsPath = "file://" + migrationsPath
-	}
+	// Migrator now handles the "file://" prefix logic internally,
+	// so we just pass the path as is.
 
 	m, err := migrator.NewMigrator(dbURL, migrationsPath)
 	if err != nil {

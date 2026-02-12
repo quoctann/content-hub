@@ -1,3 +1,4 @@
+basePath: /
 definitions:
   domain.Content:
     properties:
@@ -43,8 +44,12 @@ definitions:
       updated_at:
         type: string
     type: object
+host: localhost:8080
 info:
   contact: {}
+  description: Content Hub API Server.
+  title: Content Hub API
+  version: "1.0"
 paths:
   /contents:
     get:
@@ -79,6 +84,8 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - ApiKeyAuth: []
       summary: Search contents
       tags:
       - contents
@@ -112,6 +119,8 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - ApiKeyAuth: []
       summary: Store content
       tags:
       - contents
@@ -151,6 +160,8 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - ApiKeyAuth: []
       summary: Update content
       tags:
       - contents
@@ -169,4 +180,9 @@ paths:
       summary: Liveness probe
       tags:
       - health
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: X-API-Key
+    type: apiKey
 swagger: "2.0"

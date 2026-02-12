@@ -67,6 +67,10 @@ func (g *GinRouterGroup) Use(middleware ...MiddlewareFunc) {
 	}
 }
 
+func (g *GinRouterGroup) Group(path string) RouterGroup {
+	return &GinRouterGroup{group: g.group.Group(path)}
+}
+
 // GinContext implements the Context interface.
 type GinContext struct {
 	ctx *gin.Context
@@ -104,7 +108,11 @@ func wrapMiddleware(m MiddlewareFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, err := m(&GinContext{ctx: c})
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			if httpErr, ok := err.(*HTTPError); ok {
+				c.AbortWithStatusJSON(httpErr.Code, gin.H{"error": httpErr.Message})
+			} else {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
 			return
 		}
 		if ctx != nil {

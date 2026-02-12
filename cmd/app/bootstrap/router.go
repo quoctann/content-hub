@@ -6,6 +6,7 @@ import (
 	httpDelivery "github.com/quoctann/content-hub/internal/delivery/http"
 	"github.com/quoctann/content-hub/internal/repository/postgres"
 	"github.com/quoctann/content-hub/internal/usecase"
+	"github.com/quoctann/content-hub/pkg/middleware"
 	"github.com/quoctann/content-hub/pkg/server"
 )
 
@@ -22,5 +23,11 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 	// Setup Content module
 	contentRepo := postgres.NewContentRepo(deps.DBPool)
 	contentUsecase := usecase.NewContentUsecase(contentRepo, 5*time.Second)
-	httpDelivery.NewContentHandler(router, contentUsecase)
+
+	// Protected content routes
+	contentGroup := router.Group("/")
+	if deps.Config.Security.APIKey != "" {
+		contentGroup.Use(middleware.APIKeyAuth(deps.Config.Security.APIKey))
+	}
+	httpDelivery.NewContentHandler(contentGroup, contentUsecase)
 }

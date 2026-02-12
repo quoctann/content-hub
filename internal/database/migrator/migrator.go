@@ -2,6 +2,7 @@ package migrator
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -16,8 +17,13 @@ type GolangMigrateAdapter struct {
 
 // NewGolangMigrateAdapter creates a new adapter instance.
 func NewGolangMigrateAdapter(databaseURL string, migrationsPath string) (*GolangMigrateAdapter, error) {
+	sourceURL := migrationsPath
+	if !strings.HasPrefix(migrationsPath, "file://") {
+		sourceURL = "file://" + migrationsPath
+	}
+
 	m, err := migrate.New(
-		"file://"+migrationsPath,
+		sourceURL,
 		databaseURL,
 	)
 	if err != nil {

@@ -32,6 +32,7 @@ func NewContentHandler(r server.Router, us domain.ContentUsecase) {
 // @Param        cursor query     string  false  "Cursor for pagination"
 // @Success      200    {array}   domain.Content
 // @Failure      500    {object}  map[string]string
+// @Security     ApiKeyAuth
 // @Router       /contents [get]
 func (h *ContentHandler) Search(c server.Context) {
 	query := c.Query("q")
@@ -58,6 +59,7 @@ func (h *ContentHandler) Search(c server.Context) {
 // @Success      201      {object}  domain.Content
 // @Failure      400      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
+// @Security     ApiKeyAuth
 // @Router       /contents [post]
 func (h *ContentHandler) Store(c server.Context) {
 	var content domain.Content
@@ -85,6 +87,7 @@ func (h *ContentHandler) Store(c server.Context) {
 // @Success      200      {object}  domain.Content
 // @Failure      400      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
+// @Security     ApiKeyAuth
 // @Router       /contents/{id} [put]
 func (h *ContentHandler) Update(c server.Context) {
 	idS := c.Param("id")
