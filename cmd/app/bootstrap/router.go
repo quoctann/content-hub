@@ -19,11 +19,6 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 	// Setup health check endpoints
 	httpDelivery.RegisterHealthChecks(router, deps.DBPool)
 
-	// Setup User module
-	userRepo := postgres.NewUserRepo(deps.DBPool)
-	userUsecase := usecase.NewUserUsecase(userRepo)
-	httpDelivery.NewUserHandler(router, userUsecase)
-
 	// Setup Content module
 	contentRepo := postgres.NewContentRepo(deps.DBPool)
 	contentUsecase := usecase.NewContentUsecase(contentRepo, 5*time.Second)
