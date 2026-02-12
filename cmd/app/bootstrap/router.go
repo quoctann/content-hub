@@ -29,5 +29,5 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 	if deps.Config.Security.APIKey != "" {
 		contentGroup.Use(middleware.APIKeyAuth(deps.Config.Security.APIKey))
 	}
-	httpDelivery.NewContentHandler(contentGroup, contentUsecase)
+	httpDelivery.NewContentHandler(contentGroup, contentUsecase, deps.Logger)
 }

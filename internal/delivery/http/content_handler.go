@@ -3,46 +3,83 @@ package http
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/quoctann/content-hub/internal/domain"
+	"github.com/quoctann/content-hub/pkg/logger"
 	"github.com/quoctann/content-hub/pkg/server"
 )
 
 type ContentHandler struct {
 	CUsecase domain.ContentUsecase
+	Logger   logger.ILogger
 }
 
-func NewContentHandler(r server.Router, us domain.ContentUsecase) {
+func NewContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogger) {
 	handler := &ContentHandler{
 		CUsecase: us,
+		Logger:   l,
 	}
 	r.POST("/contents", handler.Store)
 	r.PUT("/contents/:id", handler.Update)
 	r.GET("/contents", handler.Search)
 }
 
+// validContentTypes defines the allowed content type values for the type filter.
+var validContentTypes = map[domain.ContentType]bool{
+	domain.Text:  true,
+	domain.Image: true,
+}
+
 // Search godoc
 // @Summary      Search contents
-// @Description  Search contents by query text
+// @Description  Search contents by query text, type, and tags
 // @Tags         contents
 // @Accept       json
 // @Produce      json
 // @Param        q      query     string  false  "Search query"
+// @Param        type   query     string  false  "Content type filter (image, text)"
+// @Param        tags   query     string  false  "Comma-separated tag names"
 // @Param        num    query     int     false  "Number of results"
 // @Param        cursor query     string  false  "Cursor for pagination"
 // @Success      200    {array}   domain.Content
+// @Failure      400    {object}  map[string]string
 // @Failure      500    {object}  map[string]string
 // @Security     ApiKeyAuth
 // @Router       /contents [get]
 func (h *ContentHandler) Search(c server.Context) {
-	query := c.Query("q")
 	numS := c.Query("num")
 	num, _ := strconv.ParseInt(numS, 10, 64)
 	cursor := c.Query("cursor")
 
-	contents, err := h.CUsecase.Search(c.Request().Context(), query, cursor, num)
+	// Build search filter
+	filter := domain.SearchFilter{
+		Query: c.Query("q"),
+	}
+
+	// Validate and set content type filter
+	if typeStr := c.Query("type"); typeStr != "" {
+		ct := domain.ContentType(typeStr)
+		if !validContentTypes[ct] {
+			c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid type: must be 'image' or 'text'"})
+			return
+		}
+		filter.ContentType = ct
+	}
+
+	// Parse comma-separated tags
+	if tagsStr := c.Query("tags"); tagsStr != "" {
+		tags := strings.Split(tagsStr, ",")
+		for i := range tags {
+			tags[i] = strings.TrimSpace(tags[i])
+		}
+		filter.Tags = tags
+	}
+
+	contents, err := h.CUsecase.Search(c.Request().Context(), filter, cursor, num)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		h.Logger.Error(c.Request().Context(), "failed to search contents", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}
 
@@ -69,7 +106,8 @@ func (h *ContentHandler) Store(c server.Context) {
 	}
 
 	if err := h.CUsecase.Create(c.Request().Context(), &content); err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		h.Logger.Error(c.Request().Context(), "failed to store content", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}
 
@@ -105,7 +143,8 @@ func (h *ContentHandler) Update(c server.Context) {
 	content.ID = id
 
 	if err := h.CUsecase.Update(c.Request().Context(), &content); err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		h.Logger.Error(c.Request().Context(), "failed to update content", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}
 

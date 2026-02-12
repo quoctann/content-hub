@@ -1,8 +1,9 @@
 CREATE TABLE IF NOT EXISTS contents (
     id BIGSERIAL PRIMARY KEY,
     title TEXT NOT NULL,
-    text TEXT,
-    url TEXT,
+    search_data TEXT,
+    link TEXT,
+    file_name TEXT,
     type TEXT NOT NULL,
     search_vector tsvector,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -13,7 +14,7 @@ CREATE INDEX IF NOT EXISTS contents_search_vector_idx ON contents USING GIN (sea
 
 CREATE OR REPLACE FUNCTION contents_search_vector_update() RETURNS trigger AS $$
 BEGIN
-    NEW.search_vector := to_tsvector('simple', unaccent(coalesce(NEW.title, '') || ' ' || coalesce(NEW.text, '')));
+    NEW.search_vector := to_tsvector('simple', unaccent(coalesce(NEW.title, '') || ' ' || coalesce(NEW.search_data, '')));
     RETURN NEW;
 END
 $$ LANGUAGE plpgsql;

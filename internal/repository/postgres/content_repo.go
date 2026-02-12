@@ -28,11 +28,11 @@ func (r *contentRepo) Create(ctx context.Context, c *domain.Content) error {
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO contents (title, text, url, type, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, NOW(), NOW())
+		INSERT INTO contents (title, search_data, link, file_name, type, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
 		RETURNING id
 	`
-	err = tx.QueryRow(ctx, query, c.Title, c.Text, c.URL, c.Type).Scan(&c.ID)
+	err = tx.QueryRow(ctx, query, c.Title, c.SearchData, c.Link, c.FileName, c.Type).Scan(&c.ID)
 	if err != nil {
 		return fmt.Errorf("failed to insert content: %w", err)
 	}
@@ -95,10 +95,10 @@ func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
 
 	query := `
 		UPDATE contents
-		SET title = $1, text = $2, url = $3, type = $4, updated_at = NOW()
-		WHERE id = $5
+		SET title = $1, search_data = $2, link = $3, file_name = $4, type = $5, updated_at = NOW()
+		WHERE id = $6
 	`
-	tag, err := tx.Exec(ctx, query, c.Title, c.Text, c.URL, c.Type, c.ID)
+	tag, err := tx.Exec(ctx, query, c.Title, c.SearchData, c.Link, c.FileName, c.Type, c.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update content: %w", err)
 	}
@@ -120,7 +120,7 @@ func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
 	return tx.Commit(ctx)
 }
 
-func (r *contentRepo) Search(ctx context.Context, query string, cursor string, num int64) ([]domain.Content, error) {
+func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cursor string, num int64) ([]domain.Content, error) {
 	var offset int
 	if cursor != "" {
 		fmt.Sscanf(cursor, "%d", &offset)
@@ -134,19 +134,52 @@ func (r *contentRepo) Search(ctx context.Context, query string, cursor string, n
 		limit = 20 // Default limit
 	}
 
-	baseQuery := `
-		SELECT c.id, c.title, c.text, c.url, c.type, c.created_at, c.updated_at
+	selectClause := "DISTINCT c.id, c.title, c.search_data, c.link, c.type, c.created_at, c.updated_at"
+	if filter.Query != "" {
+		// Calculate queryArgIdx for rank calculation in SELECT
+		// Matches the logic below for arg indices
+		queryArgIdx := 1
+		if len(filter.Tags) > 0 {
+			queryArgIdx = 2
+		}
+		selectClause += fmt.Sprintf(", ts_rank(search_vector, plainto_tsquery('simple', unaccent($%d))) as rank", queryArgIdx)
+	}
+
+	baseQuery := fmt.Sprintf(`
+		SELECT %s
 		FROM contents c
-	`
+	`, selectClause)
 	var args []interface{}
 	var conditions []string
 	argID := 1
 
-	if query != "" {
+	// Join content_tags and tags tables when filtering by tags
+	if len(filter.Tags) > 0 {
+		baseQuery += `
+		JOIN content_tags ct ON c.id = ct.content_id
+		JOIN tags t ON ct.tag_id = t.id
+		`
+		conditions = append(conditions, fmt.Sprintf("LOWER(t.name) = ANY($%d)", argID))
+		// Lowercase all tag names for case-insensitive matching
+		lowerTags := make([]string, len(filter.Tags))
+		for i, tag := range filter.Tags {
+			lowerTags[i] = strings.ToLower(tag)
+		}
+		args = append(args, lowerTags)
+		argID++
+	}
+
+	if filter.Query != "" {
 		// Use unaccent for both the document (in search_vector) and the query
 		// 'simple' dictionary is used to avoid stemming which might conflict with vietnamese unaccenting
 		conditions = append(conditions, fmt.Sprintf("search_vector @@ plainto_tsquery('simple', unaccent($%d))", argID))
-		args = append(args, query)
+		args = append(args, filter.Query)
+		argID++
+	}
+
+	if filter.ContentType != "" {
+		conditions = append(conditions, fmt.Sprintf("c.type = $%d", argID))
+		args = append(args, string(filter.ContentType))
 		argID++
 	}
 
@@ -155,14 +188,10 @@ func (r *contentRepo) Search(ctx context.Context, query string, cursor string, n
 	}
 
 	// Order by rank if query is present, otherwise by created_at desc
-	if query != "" {
-		// Note: We need to pass the query again for ts_rank, or reuse parameter
-		// Since we append args, we can just refer to $1 if it's the first arg.
-		// However, to be safe with arg indices, let's reuse the index if we know precise structure.
-		// For simplicity, we just use the same logic. logic: $1 is the query.
-		baseQuery += fmt.Sprintf(" ORDER BY ts_rank(search_vector, plainto_tsquery('simple', unaccent($%d))) DESC, created_at DESC", 1)
+	if filter.Query != "" {
+		baseQuery += " ORDER BY rank DESC, c.created_at DESC"
 	} else {
-		baseQuery += " ORDER BY created_at DESC"
+		baseQuery += " ORDER BY c.created_at DESC"
 	}
 
 	baseQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argID, argID+1)
@@ -181,7 +210,13 @@ func (r *contentRepo) Search(ctx context.Context, query string, cursor string, n
 
 	for rows.Next() {
 		var c domain.Content
-		err := rows.Scan(&c.ID, &c.Title, &c.Text, &c.URL, &c.Type, &c.CreatedAt, &c.UpdatedAt)
+		var err error
+		if filter.Query != "" {
+			var rank float64
+			err = rows.Scan(&c.ID, &c.Title, &c.SearchData, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt, &rank)
+		} else {
+			err = rows.Scan(&c.ID, &c.Title, &c.SearchData, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("scan failed: %w", err)
 		}

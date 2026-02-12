@@ -31,8 +31,8 @@ func (u *contentUsecase) Update(ctx context.Context, content *domain.Content) er
 	return u.contentRepo.Update(ctx, content)
 }
 
-func (u *contentUsecase) Search(ctx context.Context, query string, cursor string, num int64) ([]domain.Content, error) {
+func (u *contentUsecase) Search(ctx context.Context, filter domain.SearchFilter, cursor string, num int64) ([]domain.Content, error) {
 	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
 	defer cancel()
-	return u.contentRepo.Search(ctx, query, cursor, num)
+	return u.contentRepo.Search(ctx, filter, cursor, num)
 }
