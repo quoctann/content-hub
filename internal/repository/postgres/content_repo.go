@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/quoctann/content-hub/internal/domain"
 )
@@ -28,62 +27,16 @@ func (r *contentRepo) Create(ctx context.Context, c *domain.Content) error {
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO contents (title, search_data, link, file_name, type, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+		INSERT INTO content (title, text_data, ocr_text, caption, link, file_name, type, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
 		RETURNING id
 	`
-	err = tx.QueryRow(ctx, query, c.Title, c.SearchData, c.Link, c.FileName, c.Type).Scan(&c.ID)
+	err = tx.QueryRow(ctx, query, c.Title, c.TextData, c.OCRText, c.Caption, c.Link, c.FileName, c.Type).Scan(&c.ID)
 	if err != nil {
 		return fmt.Errorf("failed to insert content: %w", err)
 	}
 
-	// Handle tags
-	if err := r.upsertTags(ctx, tx, c); err != nil {
-		return err
-	}
-
 	return tx.Commit(ctx)
-}
-
-func (r *contentRepo) upsertTags(ctx context.Context, tx pgx.Tx, c *domain.Content) error {
-	if len(c.Tags) == 0 {
-		return nil
-	}
-
-	for i, tag := range c.Tags {
-		var tagID int64
-		// If ID is set, verify existence? No, assuming valid if ID presented.
-		// Usually we check by name to avoid duplicates if ID is missing.
-		if tag.ID != 0 {
-			tagID = tag.ID
-		} else if tag.Name != "" {
-			// Find or Create
-			tagQuery := `
-				INSERT INTO tags (name, created_at, updated_at)
-				VALUES ($1, NOW(), NOW())
-				ON CONFLICT (name) DO UPDATE SET updated_at = NOW()
-				RETURNING id
-			`
-			err := tx.QueryRow(ctx, tagQuery, tag.Name).Scan(&tagID)
-			if err != nil {
-				return fmt.Errorf("failed to upsert tag '%s': %w", tag.Name, err)
-			}
-			c.Tags[i].ID = tagID
-		} else {
-			continue // Skip empty tags
-		}
-
-		linkQuery := `
-			INSERT INTO content_tags (content_id, tag_id)
-			VALUES ($1, $2)
-			ON CONFLICT DO NOTHING
-		`
-		_, err := tx.Exec(ctx, linkQuery, c.ID, tagID)
-		if err != nil {
-			return fmt.Errorf("failed to link tag id %d: %w", tagID, err)
-		}
-	}
-	return nil
 }
 
 func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
@@ -94,27 +47,16 @@ func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
 	defer tx.Rollback(ctx)
 
 	query := `
-		UPDATE contents
-		SET title = $1, search_data = $2, link = $3, file_name = $4, type = $5, updated_at = NOW()
-		WHERE id = $6
+		UPDATE content
+		SET title = $1, text_data = $2, ocr_text = $3, caption = $4, link = $5, file_name = $6, type = $7, updated_at = NOW()
+		WHERE id = $8
 	`
-	tag, err := tx.Exec(ctx, query, c.Title, c.SearchData, c.Link, c.FileName, c.Type, c.ID)
+	tag, err := tx.Exec(ctx, query, c.Title, c.TextData, c.OCRText, c.Caption, c.Link, c.FileName, c.Type, c.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update content: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("content not found")
-	}
-
-	// Remove existing tags mapping
-	_, err = tx.Exec(ctx, "DELETE FROM content_tags WHERE content_id = $1", c.ID)
-	if err != nil {
-		return fmt.Errorf("failed to clear existing tags: %w", err)
-	}
-
-	// Re-add tags
-	if err := r.upsertTags(ctx, tx, c); err != nil {
-		return err
 	}
 
 	return tx.Commit(ctx)
@@ -131,50 +73,48 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 
 	limit := num
 	if limit <= 0 {
-		limit = 20 // Default limit
+		limit = 10 // Default limit
 	}
 
-	selectClause := "DISTINCT c.id, c.title, c.search_data, c.link, c.type, c.created_at, c.updated_at"
-	if filter.Query != "" {
-		// Calculate queryArgIdx for rank calculation in SELECT
-		// Matches the logic below for arg indices
-		queryArgIdx := 1
-		if len(filter.Tags) > 0 {
-			queryArgIdx = 2
-		}
-		selectClause += fmt.Sprintf(", ts_rank(search_vector, plainto_tsquery('simple', unaccent($%d))) as rank", queryArgIdx)
+	// Determine if we have a search query (from Keywords or legacy Query)
+	hasSearchQuery := len(filter.Keywords) > 0 || filter.Query != ""
+
+	// Build args slice and track parameter index
+	var args []interface{}
+	var tsqueryFunc string
+	argID := 1 // Will be incremented as we add parameters
+
+	if len(filter.Keywords) > 0 {
+		searchArgs, funcName := r.buildSearchArgs(filter.Keywords, filter.MatchType)
+		args = searchArgs
+		tsqueryFunc = funcName
+		argID = len(args) + 1 // Move to next available param slot
+	} else if filter.Query != "" {
+		args = []interface{}{filter.Query}
+		tsqueryFunc = "plainto_tsquery"
+		argID = 2 // Next slot after $1
+	}
+
+	// Build SELECT clause with ts_rank always included (0 if no search query)
+	selectClause := "DISTINCT c.id, c.title, c.text_data, c.ocr_text, c.caption, c.link, c.type, c.created_at, c.updated_at"
+	if hasSearchQuery {
+		selectClause += fmt.Sprintf(", ts_rank(search_vector, %s('simple', unaccent($1))) as rank", tsqueryFunc)
+	} else {
+		selectClause += ", 0.0 as rank"
 	}
 
 	baseQuery := fmt.Sprintf(`
 		SELECT %s
-		FROM contents c
+		FROM content c
 	`, selectClause)
-	var args []interface{}
+
 	var conditions []string
-	argID := 1
 
-	// Join content_tags and tags tables when filtering by tags
-	if len(filter.Tags) > 0 {
-		baseQuery += `
-		JOIN content_tags ct ON c.id = ct.content_id
-		JOIN tags t ON ct.tag_id = t.id
-		`
-		conditions = append(conditions, fmt.Sprintf("LOWER(t.name) = ANY($%d)", argID))
-		// Lowercase all tag names for case-insensitive matching
-		lowerTags := make([]string, len(filter.Tags))
-		for i, tag := range filter.Tags {
-			lowerTags[i] = strings.ToLower(tag)
-		}
-		args = append(args, lowerTags)
-		argID++
-	}
-
-	if filter.Query != "" {
-		// Use unaccent for both the document (in search_vector) and the query
-		// 'simple' dictionary is used to avoid stemming which might conflict with vietnamese unaccenting
-		conditions = append(conditions, fmt.Sprintf("search_vector @@ plainto_tsquery('simple', unaccent($%d))", argID))
-		args = append(args, filter.Query)
-		argID++
+	// Build search condition from Keywords (preferred) or legacy Query
+	if len(filter.Keywords) > 0 {
+		conditions = append(conditions, fmt.Sprintf("search_vector @@ %s('simple', unaccent($1))", tsqueryFunc))
+	} else if filter.Query != "" {
+		conditions = append(conditions, "search_vector @@ plainto_tsquery('simple', unaccent($1))")
 	}
 
 	if filter.ContentType != "" {
@@ -187,8 +127,8 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 		baseQuery += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	// Order by rank if query is present, otherwise by created_at desc
-	if filter.Query != "" {
+	// Order by rank DESC if query is present, then by created_at
+	if hasSearchQuery {
 		baseQuery += " ORDER BY rank DESC, c.created_at DESC"
 	} else {
 		baseQuery += " ORDER BY c.created_at DESC"
@@ -204,56 +144,57 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 	defer rows.Close()
 
 	var contents []domain.Content
-	// Map to hold content IDs to fetch tags
-	contentMap := make(map[int64]*domain.Content)
-	var contentIDs []int64
 
 	for rows.Next() {
 		var c domain.Content
-		var err error
-		if filter.Query != "" {
-			var rank float64
-			err = rows.Scan(&c.ID, &c.Title, &c.SearchData, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt, &rank)
-		} else {
-			err = rows.Scan(&c.ID, &c.Title, &c.SearchData, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt)
-		}
+		var rank float64
+		err := rows.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt, &rank)
 		if err != nil {
 			return nil, fmt.Errorf("scan failed: %w", err)
 		}
+		c.Rank = rank
 		contents = append(contents, c)
 	}
 
-	if len(contents) > 0 {
-		// Populate IDs and Map
-		for i := range contents {
-			contentIDs = append(contentIDs, contents[i].ID)
-			contentMap[contents[i].ID] = &contents[i]
-		}
+	return contents, nil
+}
 
-		// Fetch Tags
-		tagsQuery := `
-			SELECT ct.content_id, t.id, t.name, t.created_at, t.updated_at
-			FROM tags t
-			JOIN content_tags ct ON t.id = ct.tag_id
-			WHERE ct.content_id = ANY($1)
-		`
-		tagRows, err := r.db.Query(ctx, tagsQuery, contentIDs)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch tags: %w", err)
-		}
-		defer tagRows.Close()
+func (r *contentRepo) buildSearchArgs(keywords []string, matchType string) ([]interface{}, string) {
+	// Default to OR if not specified
+	if matchType == "" {
+		matchType = "or"
+	}
 
-		for tagRows.Next() {
-			var contentID int64
-			var t domain.Tag
-			if err := tagRows.Scan(&contentID, &t.ID, &t.Name, &t.CreatedAt, &t.UpdatedAt); err != nil {
-				return nil, fmt.Errorf("tag scan failed: %w", err)
-			}
-			if c, ok := contentMap[contentID]; ok {
-				c.Tags = append(c.Tags, t)
-			}
+	// Filter out empty keywords
+	var validKeywords []string
+	for _, kw := range keywords {
+		kw = strings.TrimSpace(kw)
+		if kw != "" {
+			validKeywords = append(validKeywords, kw)
 		}
 	}
 
-	return contents, nil
+	if len(validKeywords) == 0 {
+		return nil, "plainto_tsquery"
+	}
+
+	if len(validKeywords) == 1 {
+		return []interface{}{validKeywords[0]}, "plainto_tsquery"
+	}
+
+	// Multiple keywords: build combined query string for to_tsquery
+	separator := " & " // AND
+	if matchType == "or" {
+		separator = " | "
+	}
+
+	// Escape single quotes in keywords for to_tsquery
+	var escapedKeywords []string
+	for _, kw := range validKeywords {
+		escaped := strings.ReplaceAll(kw, "'", "''")
+		escapedKeywords = append(escapedKeywords, escaped)
+	}
+	queryStr := strings.Join(escapedKeywords, separator)
+
+	return []interface{}{queryStr}, "to_tsquery"
 }

@@ -22,7 +22,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Search contents by query text",
+                "description": "Search contents by keywords, query text, type, and tags",
                 "consumes": [
                     "application/json"
                 ],
@@ -36,8 +36,26 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Search query",
+                        "description": "Comma-separated keywords: hello,world",
+                        "name": "keywords",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Match type: and (all must match) or or (any match), default or",
+                        "name": "match_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search query (deprecated, use keywords)",
                         "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Content type filter (image, text)",
+                        "name": "type",
                         "in": "query"
                     },
                     {
@@ -59,7 +77,16 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.Content"
+                                "$ref": "#/definitions/http.ContentResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
                             }
                         }
                     },
@@ -106,7 +133,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.Content"
+                            "$ref": "#/definitions/http.ContentResponse"
                         }
                     },
                     "400": {
@@ -170,7 +197,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Content"
+                            "$ref": "#/definitions/http.ContentResponse"
                         }
                     },
                     "400": {
@@ -222,22 +249,29 @@ const docTemplate = `{
         "domain.Content": {
             "type": "object",
             "properties": {
+                "caption": {
+                    "description": "available for image content",
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
                 "id": {
                     "type": "integer"
                 },
-                "is_deleted": {
-                    "type": "boolean"
+                "link": {
+                    "type": "string"
                 },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/domain.Tag"
-                    }
+                "ocr_text": {
+                    "description": "available for image content after OCR processing",
+                    "type": "string"
                 },
-                "text": {
+                "rank": {
+                    "description": "Relevance rank from FTS, 0 if no search query",
+                    "type": "number"
+                },
+                "text_data": {
+                    "description": "available for text content",
                     "type": "string"
                 },
                 "title": {
@@ -247,9 +281,6 @@ const docTemplate = `{
                     "$ref": "#/definitions/domain.ContentType"
                 },
                 "updated_at": {
-                    "type": "string"
-                },
-                "url": {
                     "type": "string"
                 }
             }
@@ -265,7 +296,7 @@ const docTemplate = `{
                 "Image"
             ]
         },
-        "domain.Tag": {
+        "http.ContentResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -274,14 +305,20 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "is_deleted": {
-                    "type": "boolean"
-                },
-                "name": {
+                "link": {
                     "type": "string"
                 },
-                "updated_at": {
+                "rank": {
+                    "type": "number"
+                },
+                "text_data": {
                     "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/domain.ContentType"
                 }
             }
         }

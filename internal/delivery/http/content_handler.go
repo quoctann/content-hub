@@ -33,18 +33,19 @@ var validContentTypes = map[domain.ContentType]bool{
 
 // Search godoc
 // @Summary      Search contents
-// @Description  Search contents by query text, type, and tags
+// @Description  Search contents by keywords, query text, type, and tags
 // @Tags         contents
 // @Accept       json
 // @Produce      json
-// @Param        q      query     string  false  "Search query"
-// @Param        type   query     string  false  "Content type filter (image, text)"
-// @Param        tags   query     string  false  "Comma-separated tag names"
-// @Param        num    query     int     false  "Number of results"
-// @Param        cursor query     string  false  "Cursor for pagination"
-// @Success      200    {array}   domain.Content
-// @Failure      400    {object}  map[string]string
-// @Failure      500    {object}  map[string]string
+// @Param        keywords   query     string  false  "Comma-separated keywords: hello,world"
+// @Param        match_type query     string  false  "Match type: and (all must match) or or (any match), default or"
+// @Param        q          query     string  false  "Search query (deprecated, use keywords)"
+// @Param        type       query     string  false  "Content type filter (image, text)"
+// @Param        num        query     int     false  "Number of results"
+// @Param        cursor     query     string  false  "Cursor for pagination"
+// @Success      200        {array}   ContentResponse
+// @Failure      400        {object}  map[string]string
+// @Failure      500        {object}  map[string]string
 // @Security     ApiKeyAuth
 // @Router       /contents [get]
 func (h *ContentHandler) Search(c server.Context) {
@@ -53,8 +54,25 @@ func (h *ContentHandler) Search(c server.Context) {
 	cursor := c.Query("cursor")
 
 	// Build search filter
-	filter := domain.SearchFilter{
-		Query: c.Query("q"),
+	filter := domain.SearchFilter{}
+
+	// Parse keywords (preferred) or fallback to legacy q
+	keywordsStr := c.Query("keywords")
+	if keywordsStr != "" {
+		parts := strings.Split(keywordsStr, ",")
+		for _, p := range parts {
+			if trimmed := strings.TrimSpace(p); trimmed != "" {
+				filter.Keywords = append(filter.Keywords, trimmed)
+			}
+		}
+		// Default to "or" if match_type not provided
+		filter.MatchType = c.Query("match_type")
+		if filter.MatchType == "" {
+			filter.MatchType = "or"
+		}
+	} else {
+		// Legacy: fallback to q query
+		filter.Query = c.Query("q")
 	}
 
 	// Validate and set content type filter
@@ -67,15 +85,6 @@ func (h *ContentHandler) Search(c server.Context) {
 		filter.ContentType = ct
 	}
 
-	// Parse comma-separated tags
-	if tagsStr := c.Query("tags"); tagsStr != "" {
-		tags := strings.Split(tagsStr, ",")
-		for i := range tags {
-			tags[i] = strings.TrimSpace(tags[i])
-		}
-		filter.Tags = tags
-	}
-
 	contents, err := h.CUsecase.Search(c.Request().Context(), filter, cursor, num)
 	if err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to search contents", logger.Error(err))
@@ -83,7 +92,7 @@ func (h *ContentHandler) Search(c server.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, contents)
+	c.JSON(http.StatusOK, ToContentResponseList(contents))
 }
 
 // Store godoc
@@ -93,7 +102,7 @@ func (h *ContentHandler) Search(c server.Context) {
 // @Accept       json
 // @Produce      json
 // @Param        content  body      domain.Content  true  "Content"
-// @Success      201      {object}  domain.Content
+// @Success      201      {object}  ContentResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Security     ApiKeyAuth
@@ -111,7 +120,7 @@ func (h *ContentHandler) Store(c server.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, content)
+	c.JSON(http.StatusCreated, ToContentResponse(&content))
 }
 
 // Update godoc
@@ -122,7 +131,7 @@ func (h *ContentHandler) Store(c server.Context) {
 // @Produce      json
 // @Param        id       path      int             true  "Content ID"
 // @Param        content  body      domain.Content  true  "Content"
-// @Success      200      {object}  domain.Content
+// @Success      200      {object}  ContentResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Security     ApiKeyAuth
@@ -148,5 +157,5 @@ func (h *ContentHandler) Update(c server.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, content)
+	c.JSON(http.StatusOK, ToContentResponse(&content))
 }
