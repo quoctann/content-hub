@@ -22,7 +22,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Search contents by query text, type, and tags",
+                "description": "Search contents by keywords, query text, type, and tags",
                 "consumes": [
                     "application/json"
                 ],
@@ -36,7 +36,19 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Search query",
+                        "description": "Comma-separated keywords: hello,world",
+                        "name": "keywords",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Match type: and (all must match) or or (any match), default or",
+                        "name": "match_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search query (deprecated, use keywords)",
                         "name": "q",
                         "in": "query"
                     },
@@ -65,7 +77,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.Content"
+                                "$ref": "#/definitions/http.ContentResponse"
                             }
                         }
                     },
@@ -121,7 +133,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.Content"
+                            "$ref": "#/definitions/http.ContentResponse"
                         }
                     },
                     "400": {
@@ -185,7 +197,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Content"
+                            "$ref": "#/definitions/http.ContentResponse"
                         }
                     },
                     "400": {
@@ -254,6 +266,10 @@ const docTemplate = `{
                     "description": "available for image content after OCR processing",
                     "type": "string"
                 },
+                "rank": {
+                    "description": "Relevance rank from FTS, 0 if no search query",
+                    "type": "number"
+                },
                 "text_data": {
                     "description": "available for text content",
                     "type": "string"
@@ -279,6 +295,32 @@ const docTemplate = `{
                 "Text",
                 "Image"
             ]
+        },
+        "http.ContentResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "link": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "number"
+                },
+                "text_data": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/domain.ContentType"
+                }
+            }
         }
     },
     "securityDefinitions": {

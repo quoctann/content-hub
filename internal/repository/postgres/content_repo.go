@@ -73,30 +73,48 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 
 	limit := num
 	if limit <= 0 {
-		limit = 20 // Default limit
+		limit = 10 // Default limit
 	}
 
+	// Determine if we have a search query (from Keywords or legacy Query)
+	hasSearchQuery := len(filter.Keywords) > 0 || filter.Query != ""
+
+	// Build args slice and track parameter index
+	var args []interface{}
+	var tsqueryFunc string
+	argID := 1 // Will be incremented as we add parameters
+
+	if len(filter.Keywords) > 0 {
+		searchArgs, funcName := r.buildSearchArgs(filter.Keywords, filter.MatchType)
+		args = searchArgs
+		tsqueryFunc = funcName
+		argID = len(args) + 1 // Move to next available param slot
+	} else if filter.Query != "" {
+		args = []interface{}{filter.Query}
+		tsqueryFunc = "plainto_tsquery"
+		argID = 2 // Next slot after $1
+	}
+
+	// Build SELECT clause with ts_rank always included (0 if no search query)
 	selectClause := "DISTINCT c.id, c.title, c.text_data, c.ocr_text, c.caption, c.link, c.type, c.created_at, c.updated_at"
-	if filter.Query != "" {
-		// Calculate queryArgIdx for rank calculation in SELECT
-		queryArgIdx := 1
-		selectClause += fmt.Sprintf(", ts_rank(search_vector, plainto_tsquery('simple', unaccent($%d))) as rank", queryArgIdx)
+	if hasSearchQuery {
+		selectClause += fmt.Sprintf(", ts_rank(search_vector, %s('simple', unaccent($1))) as rank", tsqueryFunc)
+	} else {
+		selectClause += ", 0.0 as rank"
 	}
 
 	baseQuery := fmt.Sprintf(`
 		SELECT %s
 		FROM content c
 	`, selectClause)
-	var args []interface{}
-	var conditions []string
-	argID := 1
 
-	if filter.Query != "" {
-		// Use unaccent for both the document (in search_vector) and the query
-		// 'simple' dictionary is used to avoid stemming which might conflict with vietnamese unaccenting
-		conditions = append(conditions, fmt.Sprintf("search_vector @@ plainto_tsquery('simple', unaccent($%d))", argID))
-		args = append(args, filter.Query)
-		argID++
+	var conditions []string
+
+	// Build search condition from Keywords (preferred) or legacy Query
+	if len(filter.Keywords) > 0 {
+		conditions = append(conditions, fmt.Sprintf("search_vector @@ %s('simple', unaccent($1))", tsqueryFunc))
+	} else if filter.Query != "" {
+		conditions = append(conditions, "search_vector @@ plainto_tsquery('simple', unaccent($1))")
 	}
 
 	if filter.ContentType != "" {
@@ -109,8 +127,8 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 		baseQuery += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	// Order by rank if query is present, otherwise by created_at desc
-	if filter.Query != "" {
+	// Order by rank DESC if query is present, then by created_at
+	if hasSearchQuery {
 		baseQuery += " ORDER BY rank DESC, c.created_at DESC"
 	} else {
 		baseQuery += " ORDER BY c.created_at DESC"
@@ -129,18 +147,54 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 
 	for rows.Next() {
 		var c domain.Content
-		var err error
-		if filter.Query != "" {
-			var rank float64
-			err = rows.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt, &rank)
-		} else {
-			err = rows.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt)
-		}
+		var rank float64
+		err := rows.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt, &rank)
 		if err != nil {
 			return nil, fmt.Errorf("scan failed: %w", err)
 		}
+		c.Rank = rank
 		contents = append(contents, c)
 	}
 
 	return contents, nil
+}
+
+func (r *contentRepo) buildSearchArgs(keywords []string, matchType string) ([]interface{}, string) {
+	// Default to OR if not specified
+	if matchType == "" {
+		matchType = "or"
+	}
+
+	// Filter out empty keywords
+	var validKeywords []string
+	for _, kw := range keywords {
+		kw = strings.TrimSpace(kw)
+		if kw != "" {
+			validKeywords = append(validKeywords, kw)
+		}
+	}
+
+	if len(validKeywords) == 0 {
+		return nil, "plainto_tsquery"
+	}
+
+	if len(validKeywords) == 1 {
+		return []interface{}{validKeywords[0]}, "plainto_tsquery"
+	}
+
+	// Multiple keywords: build combined query string for to_tsquery
+	separator := " & " // AND
+	if matchType == "or" {
+		separator = " | "
+	}
+
+	// Escape single quotes in keywords for to_tsquery
+	var escapedKeywords []string
+	for _, kw := range validKeywords {
+		escaped := strings.ReplaceAll(kw, "'", "''")
+		escapedKeywords = append(escapedKeywords, escaped)
+	}
+	queryStr := strings.Join(escapedKeywords, separator)
+
+	return []interface{}{queryStr}, "to_tsquery"
 }

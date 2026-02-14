@@ -14,6 +14,9 @@ definitions:
       ocr_text:
         description: available for image content after OCR processing
         type: string
+      rank:
+        description: Relevance rank from FTS, 0 if no search query
+        type: number
       text_data:
         description: available for text content
         type: string
@@ -32,6 +35,23 @@ definitions:
     x-enum-varnames:
     - Text
     - Image
+  http.ContentResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      link:
+        type: string
+      rank:
+        type: number
+      text_data:
+        type: string
+      title:
+        type: string
+      type:
+        $ref: '#/definitions/domain.ContentType'
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -43,9 +63,18 @@ paths:
     get:
       consumes:
       - application/json
-      description: Search contents by query text, type, and tags
+      description: Search contents by keywords, query text, type, and tags
       parameters:
-      - description: Search query
+      - description: 'Comma-separated keywords: hello,world'
+        in: query
+        name: keywords
+        type: string
+      - description: 'Match type: and (all must match) or or (any match), default
+          or'
+        in: query
+        name: match_type
+        type: string
+      - description: Search query (deprecated, use keywords)
         in: query
         name: q
         type: string
@@ -68,7 +97,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/domain.Content'
+              $ref: '#/definitions/http.ContentResponse'
             type: array
         "400":
           description: Bad Request
@@ -104,7 +133,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/domain.Content'
+            $ref: '#/definitions/http.ContentResponse'
         "400":
           description: Bad Request
           schema:
@@ -145,7 +174,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Content'
+            $ref: '#/definitions/http.ContentResponse'
         "400":
           description: Bad Request
           schema:

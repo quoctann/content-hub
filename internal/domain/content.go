@@ -21,6 +21,7 @@ type Content struct {
 	Link      *string     `json:"link"`
 	FileName  *string     `json:"-"` // Internal use only, not exposed in API response
 	Type      ContentType `json:"type"`
+	Rank      float64     `json:"rank"` // Relevance rank from FTS, 0 if no search query
 	CreatedAt *time.Time  `json:"created_at"`
 	UpdatedAt *time.Time  `json:"updated_at"`
 }
@@ -28,6 +29,8 @@ type Content struct {
 // SearchFilter holds optional filters for the Search operation.
 type SearchFilter struct {
 	Query       string
+	Keywords    []string
+	MatchType   string // "and" or "or", default "or"
 	ContentType ContentType
 }
 
