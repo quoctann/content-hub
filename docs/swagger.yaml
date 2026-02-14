@@ -2,25 +2,26 @@ basePath: /
 definitions:
   domain.Content:
     properties:
+      caption:
+        description: available for image content
+        type: string
       created_at:
         type: string
       id:
         type: integer
-      is_deleted:
-        type: boolean
-      tags:
-        items:
-          $ref: '#/definitions/domain.Tag'
-        type: array
-      text:
+      link:
+        type: string
+      ocr_text:
+        description: available for image content after OCR processing
+        type: string
+      text_data:
+        description: available for text content
         type: string
       title:
         type: string
       type:
         $ref: '#/definitions/domain.ContentType'
       updated_at:
-        type: string
-      url:
         type: string
     type: object
   domain.ContentType:
@@ -31,19 +32,6 @@ definitions:
     x-enum-varnames:
     - Text
     - Image
-  domain.Tag:
-    properties:
-      created_at:
-        type: string
-      id:
-        type: integer
-      is_deleted:
-        type: boolean
-      name:
-        type: string
-      updated_at:
-        type: string
-    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -55,11 +43,15 @@ paths:
     get:
       consumes:
       - application/json
-      description: Search contents by query text
+      description: Search contents by query text, type, and tags
       parameters:
       - description: Search query
         in: query
         name: q
+        type: string
+      - description: Content type filter (image, text)
+        in: query
+        name: type
         type: string
       - description: Number of results
         in: query
@@ -78,6 +70,12 @@ paths:
             items:
               $ref: '#/definitions/domain.Content'
             type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:

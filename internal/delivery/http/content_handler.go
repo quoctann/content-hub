@@ -3,7 +3,6 @@ package http
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/quoctann/content-hub/internal/domain"
 	"github.com/quoctann/content-hub/pkg/logger"
@@ -39,7 +38,6 @@ var validContentTypes = map[domain.ContentType]bool{
 // @Produce      json
 // @Param        q      query     string  false  "Search query"
 // @Param        type   query     string  false  "Content type filter (image, text)"
-// @Param        tags   query     string  false  "Comma-separated tag names"
 // @Param        num    query     int     false  "Number of results"
 // @Param        cursor query     string  false  "Cursor for pagination"
 // @Success      200    {array}   domain.Content
@@ -65,15 +63,6 @@ func (h *ContentHandler) Search(c server.Context) {
 			return
 		}
 		filter.ContentType = ct
-	}
-
-	// Parse comma-separated tags
-	if tagsStr := c.Query("tags"); tagsStr != "" {
-		tags := strings.Split(tagsStr, ",")
-		for i := range tags {
-			tags[i] = strings.TrimSpace(tags[i])
-		}
-		filter.Tags = tags
 	}
 
 	contents, err := h.CUsecase.Search(c.Request().Context(), filter, cursor, num)

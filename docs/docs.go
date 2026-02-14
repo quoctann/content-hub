@@ -22,7 +22,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Search contents by query text",
+                "description": "Search contents by query text, type, and tags",
                 "consumes": [
                     "application/json"
                 ],
@@ -38,6 +38,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Search query",
                         "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Content type filter (image, text)",
+                        "name": "type",
                         "in": "query"
                     },
                     {
@@ -60,6 +66,15 @@ const docTemplate = `{
                             "type": "array",
                             "items": {
                                 "$ref": "#/definitions/domain.Content"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
                             }
                         }
                     },
@@ -222,22 +237,25 @@ const docTemplate = `{
         "domain.Content": {
             "type": "object",
             "properties": {
+                "caption": {
+                    "description": "available for image content",
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
                 "id": {
                     "type": "integer"
                 },
-                "is_deleted": {
-                    "type": "boolean"
+                "link": {
+                    "type": "string"
                 },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/domain.Tag"
-                    }
+                "ocr_text": {
+                    "description": "available for image content after OCR processing",
+                    "type": "string"
                 },
-                "text": {
+                "text_data": {
+                    "description": "available for text content",
                     "type": "string"
                 },
                 "title": {
@@ -247,9 +265,6 @@ const docTemplate = `{
                     "$ref": "#/definitions/domain.ContentType"
                 },
                 "updated_at": {
-                    "type": "string"
-                },
-                "url": {
                     "type": "string"
                 }
             }
@@ -264,26 +279,6 @@ const docTemplate = `{
                 "Text",
                 "Image"
             ]
-        },
-        "domain.Tag": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "is_deleted": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
         }
     },
     "securityDefinitions": {
