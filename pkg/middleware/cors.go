@@ -16,9 +16,10 @@ func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 
 		// Get allowed origins from config, with defaults for development
 		allowedOrigins := getDefaultOrigins()
-		if len(cfg.Security.AllowedOrigins) > 0 {
+		origins := cfg.Security.GetAllowedOrigins()
+		if len(origins) > 0 {
 			allowedOrigins = make(map[string]bool)
-			for _, o := range cfg.Security.AllowedOrigins {
+			for _, o := range origins {
 				allowedOrigins[o] = true
 			}
 		}
