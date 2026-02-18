@@ -21,6 +21,13 @@ func RegisterRoutes(r server.Router) {
 		})
 	})
 
+	// Leapcell health check
+	r.GET("/kaithheathcheck", func(c server.Context) {
+		c.JSON(http.StatusOK, map[string]string{
+			"status": "ok",
+		})
+	})
+
 	// Swagger
 	// Swagger (this still needs gin.HandlerFunc for now as it's a 3rd party lib)
 	// We handle this by casting to GinRouter if we know it's Gin, or providing an adapter.
