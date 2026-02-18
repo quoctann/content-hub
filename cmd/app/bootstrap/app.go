@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/quoctann/content-hub/pkg/logger"
+	"github.com/quoctann/content-hub/pkg/middleware"
 	"github.com/quoctann/content-hub/pkg/server"
 )
 
@@ -33,6 +34,10 @@ func NewApp(env string) (*App, error) {
 
 	srv.OnBeforeStart(func() error {
 		app.deps.Logger.InfoWithoutCtx("Starting server", logger.String("addr", ":"+app.deps.Config.Server.Port))
+
+		// Apply CORS middleware
+		ginRouter := srv.Engine()
+		ginRouter.Use(middleware.CORSMiddleware(app.deps.Config))
 
 		// Auto-migration
 		if err := RunMigrations(app.deps); err != nil {
