@@ -24,7 +24,7 @@ func NewApp(env string) (*App, error) {
 
 	srv := server.NewHTTPServer(
 		server.WithAddr(":"+deps.Config.Server.Port),
-		server.WithShutdownTimeout(10*time.Second),
+		server.WithShutdownTimeout(30*time.Second),
 	)
 
 	app := &App{
