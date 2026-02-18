@@ -38,7 +38,8 @@ type Database struct {
 }
 
 type Security struct {
-	APIKey string `mapstructure:"api_key"`
+	APIKey         string   `mapstructure:"api_key"`
+	AllowedOrigins []string `mapstructure:"allow_origins"`
 }
 
 // isFileNotFoundError checks if the error indicates a file not found.
