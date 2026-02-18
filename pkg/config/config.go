@@ -38,8 +38,8 @@ type Database struct {
 }
 
 type Security struct {
-	APIKey         string   `mapstructure:"api_key"`
-	AllowedOrigins []string `mapstructure:"allow_origins"`
+	APIKey         string `mapstructure:"api_key"`
+	AllowedOrigins string `mapstructure:"allow_origins"`
 }
 
 // isFileNotFoundError checks if the error indicates a file not found.
@@ -50,6 +50,20 @@ func isFileNotFoundError(err error) bool {
 	}
 	_, ok := err.(viper.ConfigFileNotFoundError)
 	return ok
+}
+
+// GetAllowedOrigins returns a slice of allowed origins from comma-separated string
+func (s *Security) GetAllowedOrigins() []string {
+	if s.AllowedOrigins == "" {
+		return []string{}
+	}
+	var origins []string
+	for _, origin := range strings.Split(s.AllowedOrigins, ",") {
+		if trimmed := strings.TrimSpace(origin); trimmed != "" {
+			origins = append(origins, trimmed)
+		}
+	}
+	return origins
 }
 
 func LoadConfigWithEnv(env string) (*Config, error) {
