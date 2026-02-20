@@ -22,9 +22,16 @@ func NewApp(env string) (*App, error) {
 		return nil, err
 	}
 
+	// Determine Gin mode based on environment
+	ginMode := "debug"
+	if env == "prod" {
+		ginMode = "release"
+	}
+
 	srv := server.NewHTTPServer(
 		server.WithAddr(":"+deps.Config.Server.Port),
 		server.WithShutdownTimeout(30*time.Second),
+		server.WithGinMode(ginMode),
 	)
 
 	app := &App{

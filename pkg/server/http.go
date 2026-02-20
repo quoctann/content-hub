@@ -57,6 +57,13 @@ func NewHTTPServer(opts ...HTTPOption) *HTTPServer {
 	return s
 }
 
+// WithGinMode sets the Gin mode (debug or release)
+func WithGinMode(mode string) HTTPOption {
+	return func(s *HTTPServer) {
+		gin.SetMode(mode)
+	}
+}
+
 // Functional options
 func WithAddr(addr string) HTTPOption {
 	return func(s *HTTPServer) { s.config.Addr = addr }
