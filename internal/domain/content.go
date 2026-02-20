@@ -34,14 +34,29 @@ type SearchFilter struct {
 	ContentType ContentType
 }
 
+// PaginationMeta holds pagination metadata for paginated responses
+type PaginationMeta struct {
+	TotalCount int64  `json:"total_count"`
+	PageSize   int64  `json:"page_size"`
+	Cursor     string `json:"cursor"`
+	NextCursor string `json:"next_cursor"` // Empty string if no more results
+	HasMore    bool   `json:"has_more"`
+}
+
+// ContentSearchResult wraps search results with pagination metadata
+type ContentSearchResult struct {
+	Items      []Content
+	Pagination PaginationMeta
+}
+
 type ContentRepository interface {
 	Create(ctx context.Context, content *Content) error
 	Update(ctx context.Context, content *Content) error
-	Search(ctx context.Context, filter SearchFilter, cursor string, num int64) ([]Content, error)
+	Search(ctx context.Context, filter SearchFilter, cursor string, num int64) ([]Content, int64, error)
 }
 
 type ContentUsecase interface {
 	Create(ctx context.Context, content *Content) error
 	Update(ctx context.Context, content *Content) error
-	Search(ctx context.Context, filter SearchFilter, cursor string, num int64) ([]Content, error)
+	Search(ctx context.Context, filter SearchFilter, cursor string, num int64) (*ContentSearchResult, error)
 }

@@ -41,3 +41,32 @@ func ToContentResponseList(contents []domain.Content) []ContentResponse {
 	}
 	return responses
 }
+
+// PaginationMetaResponse is the DTO for pagination metadata in API responses.
+type PaginationMetaResponse struct {
+	TotalCount int64  `json:"total_count"`
+	PageSize   int64  `json:"page_size"`
+	Cursor     string `json:"cursor"`
+	NextCursor string `json:"next_cursor"`
+	HasMore    bool   `json:"has_more"`
+}
+
+// ContentSearchResponseWrapper wraps search results with pagination metadata.
+type ContentSearchResponseWrapper struct {
+	Items      []ContentResponse      `json:"items"`
+	Pagination PaginationMetaResponse `json:"pagination"`
+}
+
+// ToContentSearchResponse converts a domain.ContentSearchResult to ContentSearchResponseWrapper.
+func ToContentSearchResponse(result *domain.ContentSearchResult) *ContentSearchResponseWrapper {
+	return &ContentSearchResponseWrapper{
+		Items: ToContentResponseList(result.Items),
+		Pagination: PaginationMetaResponse{
+			TotalCount: result.Pagination.TotalCount,
+			PageSize:   result.Pagination.PageSize,
+			Cursor:     result.Pagination.Cursor,
+			NextCursor: result.Pagination.NextCursor,
+			HasMore:    result.Pagination.HasMore,
+		},
+	}
+}

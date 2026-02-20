@@ -43,7 +43,7 @@ var validContentTypes = map[domain.ContentType]bool{
 // @Param        type       query     string  false  "Content type filter (image, text)"
 // @Param        num        query     int     false  "Number of results"
 // @Param        cursor     query     string  false  "Cursor for pagination"
-// @Success      200        {array}   ContentResponse
+// @Success      200        {object}  ContentSearchResponseWrapper
 // @Failure      400        {object}  map[string]string
 // @Failure      500        {object}  map[string]string
 // @Security     ApiKeyAuth
@@ -85,14 +85,14 @@ func (h *ContentHandler) Search(c server.Context) {
 		filter.ContentType = ct
 	}
 
-	contents, err := h.CUsecase.Search(c.Request().Context(), filter, cursor, num)
+	result, err := h.CUsecase.Search(c.Request().Context(), filter, cursor, num)
 	if err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to search contents", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, ToContentResponseList(contents))
+	c.JSON(http.StatusOK, ToContentSearchResponse(result))
 }
 
 // Store godoc

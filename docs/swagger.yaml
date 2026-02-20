@@ -52,6 +52,28 @@ definitions:
       type:
         $ref: '#/definitions/domain.ContentType'
     type: object
+  http.ContentSearchResponseWrapper:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/http.ContentResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/http.PaginationMetaResponse'
+    type: object
+  http.PaginationMetaResponse:
+    properties:
+      cursor:
+        type: string
+      has_more:
+        type: boolean
+      next_cursor:
+        type: string
+      page_size:
+        type: integer
+      total_count:
+        type: integer
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -96,9 +118,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/http.ContentResponse'
-            type: array
+            $ref: '#/definitions/http.ContentSearchResponseWrapper'
         "400":
           description: Bad Request
           schema:

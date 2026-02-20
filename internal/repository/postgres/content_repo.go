@@ -62,7 +62,7 @@ func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
 	return tx.Commit(ctx)
 }
 
-func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cursor string, num int64) ([]domain.Content, error) {
+func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cursor string, num int64) ([]domain.Content, int64, error) {
 	var offset int
 	if cursor != "" {
 		fmt.Sscanf(cursor, "%d", &offset)
@@ -123,23 +123,33 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 		argID++
 	}
 
+	whereClause := ""
 	if len(conditions) > 0 {
-		baseQuery += " WHERE " + strings.Join(conditions, " AND ")
+		whereClause = " WHERE " + strings.Join(conditions, " AND ")
 	}
 
 	// Order by rank DESC if query is present, then by created_at
+	orderClause := " ORDER BY c.created_at DESC"
 	if hasSearchQuery {
-		baseQuery += " ORDER BY rank DESC, c.created_at DESC"
-	} else {
-		baseQuery += " ORDER BY c.created_at DESC"
+		orderClause = " ORDER BY rank DESC, c.created_at DESC"
 	}
 
-	baseQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argID, argID+1)
-	args = append(args, limit, offset)
-
-	rows, err := r.db.Query(ctx, baseQuery, args...)
+	// First, get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(DISTINCT c.id) FROM content c%s", whereClause)
+	countArgs := args[:len(args)] // Use same args (without limit/offset)
+	var totalCount int64
+	err := r.db.QueryRow(ctx, countQuery, countArgs...).Scan(&totalCount)
 	if err != nil {
-		return nil, fmt.Errorf("query failed: %w", err)
+		return nil, 0, fmt.Errorf("failed to count results: %w", err)
+	}
+
+	// Then, get paginated results
+	resultQuery := baseQuery + whereClause + orderClause + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argID, argID+1)
+	resultArgs := append(args, limit, offset)
+
+	rows, err := r.db.Query(ctx, resultQuery, resultArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
@@ -150,13 +160,13 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 		var rank float64
 		err := rows.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt, &rank)
 		if err != nil {
-			return nil, fmt.Errorf("scan failed: %w", err)
+			return nil, 0, fmt.Errorf("scan failed: %w", err)
 		}
 		c.Rank = rank
 		contents = append(contents, c)
 	}
 
-	return contents, nil
+	return contents, totalCount, nil
 }
 
 func (r *contentRepo) buildSearchArgs(keywords []string, matchType string) ([]interface{}, string) {

@@ -75,10 +75,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/http.ContentResponse"
-                            }
+                            "$ref": "#/definitions/http.ContentSearchResponseWrapper"
                         }
                     },
                     "400": {
@@ -319,6 +316,40 @@ const docTemplate = `{
                 },
                 "type": {
                     "$ref": "#/definitions/domain.ContentType"
+                }
+            }
+        },
+        "http.ContentSearchResponseWrapper": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/http.ContentResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/http.PaginationMetaResponse"
+                }
+            }
+        },
+        "http.PaginationMetaResponse": {
+            "type": "object",
+            "properties": {
+                "cursor": {
+                    "type": "string"
+                },
+                "has_more": {
+                    "type": "boolean"
+                },
+                "next_cursor": {
+                    "type": "string"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
                 }
             }
         }
