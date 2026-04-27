@@ -9,8 +9,8 @@ database:
   host: "localhost"
   port: "5432"
   user: "postgres"
-  password: "postgres"
-  name: "postgres"
+  password: "Matkhau123@"
+  name: "demo"
   ssl_mode: "disable"
 
 security:
