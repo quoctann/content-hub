@@ -16,6 +16,8 @@ type Router interface {
 	PUT(path string, handler HandlerFunc)
 	// DELETE registers a handler for HTTP DELETE requests.
 	DELETE(path string, handler HandlerFunc)
+	// PATCH registers a handler for HTTP PATCH requests.
+	PATCH(path string, handler HandlerFunc)
 	// Group creates a sub‑router with a common prefix.
 	Group(path string) RouterGroup
 }
@@ -26,6 +28,7 @@ type RouterGroup interface {
 	POST(path string, handler HandlerFunc)
 	PUT(path string, handler HandlerFunc)
 	DELETE(path string, handler HandlerFunc)
+	PATCH(path string, handler HandlerFunc)
 	// Use registers one or more middleware functions for this group.
 	Use(middleware ...MiddlewareFunc)
 	// Group creates a sub-router with a common prefix.
@@ -43,6 +46,8 @@ type Context interface {
 	Bind(obj interface{}) error
 	// JSON writes a JSON response with the given HTTP status code.
 	JSON(code int, obj interface{})
+	// Status writes the HTTP status code with no body.
+	Status(code int)
 	// Request returns the underlying *http.Request.
 	Request() *http.Request
 }

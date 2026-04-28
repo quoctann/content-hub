@@ -36,6 +36,10 @@ func (r *GinRouter) DELETE(path string, handler HandlerFunc) {
 	r.engine.DELETE(path, wrapHandler(handler))
 }
 
+func (r *GinRouter) PATCH(path string, handler HandlerFunc) {
+	r.engine.PATCH(path, wrapHandler(handler))
+}
+
 func (r *GinRouter) Group(path string) RouterGroup {
 	return &GinRouterGroup{group: r.engine.Group(path)}
 }
@@ -59,6 +63,10 @@ func (g *GinRouterGroup) PUT(path string, handler HandlerFunc) {
 
 func (g *GinRouterGroup) DELETE(path string, handler HandlerFunc) {
 	g.group.DELETE(path, wrapHandler(handler))
+}
+
+func (g *GinRouterGroup) PATCH(path string, handler HandlerFunc) {
+	g.group.PATCH(path, wrapHandler(handler))
 }
 
 func (g *GinRouterGroup) Use(middleware ...MiddlewareFunc) {
@@ -90,6 +98,10 @@ func (c *GinContext) Bind(obj interface{}) error {
 
 func (c *GinContext) JSON(code int, obj interface{}) {
 	c.ctx.JSON(code, obj)
+}
+
+func (c *GinContext) Status(code int) {
+	c.ctx.Status(code)
 }
 
 func (c *GinContext) Request() *http.Request {

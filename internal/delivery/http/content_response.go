@@ -70,3 +70,33 @@ func ToContentSearchResponse(result *domain.ContentSearchResult) *ContentSearchR
 		},
 	}
 }
+
+// AdminPaginationResponse is the DTO for admin pagination with page-based navigation.
+type AdminPaginationResponse struct {
+	TotalCount int64 `json:"total_count"`
+	Page       int64 `json:"page"`
+	PageSize   int64 `json:"page_size"`
+	TotalPages int64 `json:"total_pages"`
+}
+
+// AdminContentResponseWrapper wraps admin content list with page-based pagination.
+type AdminContentResponseWrapper struct {
+	Items      []ContentResponse       `json:"items"`
+	Pagination AdminPaginationResponse `json:"pagination"`
+}
+
+func ToAdminContentResponse(result *domain.ContentSearchResult, page, pageSize int64) *AdminContentResponseWrapper {
+	totalPages := (result.Pagination.TotalCount + pageSize - 1) / pageSize
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	return &AdminContentResponseWrapper{
+		Items: ToContentResponseList(result.Items),
+		Pagination: AdminPaginationResponse{
+			TotalCount: result.Pagination.TotalCount,
+			Page:       page,
+			PageSize:   pageSize,
+			TotalPages: totalPages,
+		},
+	}
+}

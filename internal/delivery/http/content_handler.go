@@ -15,7 +15,7 @@ type ContentHandler struct {
 	Logger   logger.ILogger
 }
 
-func NewContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogger) {
+func NewContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogger, adminRoutes bool) {
 	handler := &ContentHandler{
 		CUsecase: us,
 		Logger:   l,
@@ -23,6 +23,13 @@ func NewContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogg
 	r.POST("/contents", handler.Store)
 	r.PUT("/contents/:id", handler.Update)
 	r.GET("/contents", handler.Search)
+
+	if adminRoutes {
+		r.GET("", handler.AdminList)
+		r.GET("/:id", handler.GetByID)
+		r.DELETE("/:id", handler.Delete)
+		r.PATCH("/:id/hide", handler.ToggleHide)
+	}
 }
 
 // validContentTypes defines the allowed content type values for the type filter.
@@ -158,4 +165,155 @@ func (h *ContentHandler) Update(c server.Context) {
 	}
 
 	c.JSON(http.StatusOK, ToContentResponse(&content))
+}
+
+// AdminList godoc
+// @Summary      List all content for admin
+// @Description  List all content including hidden ones
+// @Tags         admin-contents
+// @Accept      json
+// @Produce    json
+// @Param       page      query  int     false  "Page number (1-based)"
+// @Param       page_size query  int     false  "Items per page (default 20, max 100)"
+// @Success    200      {object}  AdminContentResponseWrapper
+// @Failure    500      {object}  map[string]string
+// @Security   ApiKeyAuth
+// @Router    /admin/contents [get]
+func (h *ContentHandler) AdminList(c server.Context) {
+	page, _ := strconv.ParseInt(c.Query("page"), 10, 64)
+	if page < 1 {
+		page = 1
+	}
+
+	pageSize, _ := strconv.ParseInt(c.Query("page_size"), 10, 64)
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	offset := (page - 1) * pageSize
+
+	filter := domain.SearchFilter{IncludeHidden: true}
+	cursor := strconv.FormatInt(offset, 10)
+
+	result, err := h.CUsecase.Search(c.Request().Context(), filter, cursor, pageSize)
+	if err != nil {
+		h.Logger.Error(c.Request().Context(), "failed to list contents", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, ToAdminContentResponse(result, page, pageSize))
+}
+
+// GetByID godoc
+// @Summary      Get content by ID
+// @Description  Get a single content entry by its ID
+// @Tags         admin-contents
+// @Accept       json
+// @Produce      json
+// @Param        id      path      int  true  "Content ID"
+// @Success      200     {object}  ContentResponse
+// @Failure      400     {object}  map[string]string
+// @Failure      404     {object}  map[string]string
+// @Failure      500     {object}  map[string]string
+// @Security     ApiKeyAuth
+// @Router       /admin/contents/{id} [get]
+func (h *ContentHandler) GetByID(c server.Context) {
+	idS := c.Param("id")
+	id, err := strconv.ParseInt(idS, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+
+	content, err := h.CUsecase.GetByID(c.Request().Context(), id)
+	if err != nil {
+		h.Logger.Error(c.Request().Context(), "failed to get content", logger.Error(err))
+		c.JSON(http.StatusNotFound, map[string]string{"error": "content not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, ToContentResponse(content))
+}
+
+// Delete godoc
+// @Summary      Delete content
+// @Description  Permanently delete a content entry
+// @Tags         admin-contents
+// @Accept       json
+// @Produce      json
+// @Param        id      path      int  true  "Content ID"
+// @Success      204     "No Content"
+// @Failure      400     {object}  map[string]string
+// @Failure      404     {object}  map[string]string
+// @Failure      500     {object}  map[string]string
+// @Security     ApiKeyAuth
+// @Router       /admin/contents/{id} [delete]
+func (h *ContentHandler) Delete(c server.Context) {
+	idS := c.Param("id")
+	id, err := strconv.ParseInt(idS, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+
+	if err := h.CUsecase.Delete(c.Request().Context(), id); err != nil {
+		h.Logger.Error(c.Request().Context(), "failed to delete content", logger.Error(err))
+		c.JSON(http.StatusNotFound, map[string]string{"error": "content not found"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// ToggleHideRequest represents the request body for toggle hide
+type ToggleHideRequest struct {
+	Hidden bool `json:"hidden"`
+}
+
+// ToggleHide godoc
+// @Summary      Toggle content visibility
+// @Description  Set content as hidden or visible
+// @Tags         admin-contents
+// @Accept       json
+// @Produce      json
+// @Param        id       path      int                true  "Content ID"
+// @Param        request  body      ToggleHideRequest  true  "Hidden state"
+// @Success      200      {object}  ContentResponse
+// @Failure      400      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
+// @Failure      500     {object}  map[string]string
+// @Security     ApiKeyAuth
+// @Router       /admin/contents/{id}/hide [patch]
+func (h *ContentHandler) ToggleHide(c server.Context) {
+	idS := c.Param("id")
+	id, err := strconv.ParseInt(idS, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+		return
+	}
+
+	var req ToggleHideRequest
+	if err := c.Bind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := h.CUsecase.SetHidden(c.Request().Context(), id, req.Hidden); err != nil {
+		h.Logger.Error(c.Request().Context(), "failed to toggle hide", logger.Error(err))
+		c.JSON(http.StatusNotFound, map[string]string{"error": "content not found"})
+		return
+	}
+
+	content, err := h.CUsecase.GetByID(c.Request().Context(), id)
+	if err != nil {
+		h.Logger.Error(c.Request().Context(), "failed to get content after toggle", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, ToContentResponse(content))
 }

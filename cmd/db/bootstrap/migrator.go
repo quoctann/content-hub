@@ -24,6 +24,10 @@ func InitMigrator(env, migrationsPath string) (domain.Migrator, error) {
 		cfg.Database.SSLMode,
 	)
 
+	if cfg.Database.Schema != "" {
+		dbURL = fmt.Sprintf("%s&search_path=%s", dbURL, cfg.Database.Schema)
+	}
+
 	return migrator.NewMigrator(dbURL, migrationsPath)
 }
 
