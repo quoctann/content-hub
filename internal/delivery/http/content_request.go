@@ -9,3 +9,7 @@ type UpdateContentRequest struct {
 	Type     *string `json:"type"`
 	IsHidden *bool   `json:"is_hidden"`
 }
+
+type BulkDeleteRequest struct {
+	IDs []int64 `json:"ids"`
+}

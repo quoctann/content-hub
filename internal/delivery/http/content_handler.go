@@ -36,6 +36,7 @@ func NewAdminContentHandler(r server.Router, us domain.ContentUsecase, l logger.
 	r.GET("", handler.AdminList)
 	r.GET("/:id", handler.GetByID)
 	r.DELETE("/:id", handler.Delete)
+	r.DELETE("/bulk-delete", handler.BulkDelete)
 	r.PATCH("/:id/hide", handler.ToggleHide)
 }
 
@@ -384,4 +385,20 @@ func (h *ContentHandler) ToggleHide(c server.Context) {
 	}
 
 	c.JSON(http.StatusOK, ToContentResponse(content))
+}
+
+func (h *ContentHandler) BulkDelete(c server.Context) {
+	var req BulkDeleteRequest
+	if err := c.Bind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := h.CUsecase.DeleteMany(c.Request().Context(), req.IDs); err != nil {
+		h.Logger.Error(c.Request().Context(), "failed to bulk delete contents", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }

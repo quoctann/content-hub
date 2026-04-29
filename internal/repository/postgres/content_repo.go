@@ -57,7 +57,7 @@ func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
 			type = $7,
 			is_hidden = $8,
 			updated_at = NOW()
-		WHERE id = $9
+		WHERE id = $9 AND deleted_at IS NULL
 	`
 	tag, err := tx.Exec(ctx, query, c.Title, c.TextData, c.OCRText, c.Caption, c.Link, c.FileName, c.Type, c.IsHidden, c.ID)
 	if err != nil {
@@ -71,13 +71,25 @@ func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
 }
 
 func (r *contentRepo) Delete(ctx context.Context, id int64) error {
-	query := `DELETE FROM content WHERE id = $1`
+	query := `UPDATE content SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
 	tag, err := r.db.Exec(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("failed to delete content: %w", err)
+		return fmt.Errorf("failed to soft-delete content: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("content not found")
+		return fmt.Errorf("content not found or already deleted")
+	}
+	return nil
+}
+
+func (r *contentRepo) DeleteMany(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	query := `UPDATE content SET deleted_at = NOW(), updated_at = NOW() WHERE id = ANY($1) AND deleted_at IS NULL`
+	_, err := r.db.Exec(ctx, query, ids)
+	if err != nil {
+		return fmt.Errorf("failed to bulk soft-delete content: %w", err)
 	}
 	return nil
 }
@@ -86,7 +98,7 @@ func (r *contentRepo) GetByID(ctx context.Context, id int64) (*domain.Content, e
 	query := `
 		SELECT id, title, text_data, ocr_text, caption, link, type, is_hidden, created_at, updated_at
 		FROM content
-		WHERE id = $1
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 	var c domain.Content
 	err := r.db.QueryRow(ctx, query, id).Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.IsHidden, &c.CreatedAt, &c.UpdatedAt)
@@ -97,7 +109,7 @@ func (r *contentRepo) GetByID(ctx context.Context, id int64) (*domain.Content, e
 }
 
 func (r *contentRepo) SetHidden(ctx context.Context, id int64, hidden bool) error {
-	query := `UPDATE content SET is_hidden = $1, updated_at = NOW() WHERE id = $2`
+	query := `UPDATE content SET is_hidden = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL`
 	tag, err := r.db.Exec(ctx, query, hidden, id)
 	if err != nil {
 		return fmt.Errorf("failed to set hidden: %w", err)
@@ -155,6 +167,7 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 	`, selectClause)
 
 	var conditions []string
+	conditions = append(conditions, "c.deleted_at IS NULL")
 
 	// Visibility filter logic:
 	// - IncludeHidden false (public API): always exclude hidden

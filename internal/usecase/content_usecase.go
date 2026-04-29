@@ -38,6 +38,12 @@ func (u *contentUsecase) Delete(ctx context.Context, id int64) error {
 	return u.contentRepo.Delete(ctx, id)
 }
 
+func (u *contentUsecase) DeleteMany(ctx context.Context, ids []int64) error {
+	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
+	defer cancel()
+	return u.contentRepo.DeleteMany(ctx, ids)
+}
+
 func (u *contentUsecase) GetByID(ctx context.Context, id int64) (*domain.Content, error) {
 	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
 	defer cancel()

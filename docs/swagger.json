@@ -9,6 +9,271 @@
     "host": "localhost:8080",
     "basePath": "/",
     "paths": {
+        "/admin/contents": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "List all content including hidden ones, with optional search/filter",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-contents"
+                ],
+                "summary": "List all content for admin",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 20, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search keyword",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Content type filter (image, text)",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Visibility filter: true (visible only), false (hidden only), or empty (all)",
+                        "name": "visible",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.AdminContentResponseWrapper"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/contents/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get a single content entry by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-contents"
+                ],
+                "summary": "Get content by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Content ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.ContentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Permanently delete a content entry",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-contents"
+                ],
+                "summary": "Delete content",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Content ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/contents/{id}/hide": {
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Set content as hidden or visible",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-contents"
+                ],
+                "summary": "Toggle content visibility",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Content ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Hidden state",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.ToggleHideRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.ContentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/contents": {
             "get": {
                 "security": [
@@ -155,7 +420,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Update existing content",
+                "description": "Update existing content (supports partial updates)",
                 "consumes": [
                     "application/json"
                 ],
@@ -175,12 +440,12 @@
                         "required": true
                     },
                     {
-                        "description": "Content",
+                        "description": "Content (partial fields allowed)",
                         "name": "content",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/domain.Content"
+                            "$ref": "#/definitions/http.UpdateContentRequest"
                         }
                     }
                 ],
@@ -247,8 +512,14 @@
                 "created_at": {
                     "type": "string"
                 },
+                "deleted_at": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "integer"
+                },
+                "is_hidden": {
+                    "type": "boolean"
                 },
                 "link": {
                     "type": "string"
@@ -287,16 +558,56 @@
                 "Image"
             ]
         },
+        "http.AdminContentResponseWrapper": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/http.ContentResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/http.AdminPaginationResponse"
+                }
+            }
+        },
+        "http.AdminPaginationResponse": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
         "http.ContentResponse": {
             "type": "object",
             "properties": {
+                "caption": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
                 "id": {
                     "type": "integer"
                 },
+                "is_hidden": {
+                    "type": "boolean"
+                },
                 "link": {
+                    "type": "string"
+                },
+                "ocr_text": {
                     "type": "string"
                 },
                 "rank": {
@@ -310,6 +621,9 @@
                 },
                 "type": {
                     "$ref": "#/definitions/domain.ContentType"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -344,6 +658,40 @@
                 },
                 "total_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "http.ToggleHideRequest": {
+            "type": "object",
+            "properties": {
+                "hidden": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "http.UpdateContentRequest": {
+            "type": "object",
+            "properties": {
+                "caption": {
+                    "type": "string"
+                },
+                "is_hidden": {
+                    "type": "boolean"
+                },
+                "link": {
+                    "type": "string"
+                },
+                "ocr_text": {
+                    "type": "string"
+                },
+                "text_data": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         }
