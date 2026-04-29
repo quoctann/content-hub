@@ -15,7 +15,7 @@ type ContentHandler struct {
 	Logger   logger.ILogger
 }
 
-func NewContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogger, adminRoutes bool) {
+func NewContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogger) {
 	handler := &ContentHandler{
 		CUsecase: us,
 		Logger:   l,
@@ -23,13 +23,20 @@ func NewContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogg
 	r.POST("/contents", handler.Store)
 	r.PUT("/contents/:id", handler.Update)
 	r.GET("/contents", handler.Search)
+}
 
-	if adminRoutes {
-		r.GET("", handler.AdminList)
-		r.GET("/:id", handler.GetByID)
-		r.DELETE("/:id", handler.Delete)
-		r.PATCH("/:id/hide", handler.ToggleHide)
+func NewAdminContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogger) {
+	handler := &ContentHandler{
+		CUsecase: us,
+		Logger:   l,
 	}
+
+	r.POST("", handler.Store)
+	r.PUT("/:id", handler.Update)
+	r.GET("", handler.AdminList)
+	r.GET("/:id", handler.GetByID)
+	r.DELETE("/:id", handler.Delete)
+	r.PATCH("/:id/hide", handler.ToggleHide)
 }
 
 // validContentTypes defines the allowed content type values for the type filter.
@@ -132,12 +139,12 @@ func (h *ContentHandler) Store(c server.Context) {
 
 // Update godoc
 // @Summary      Update content
-// @Description  Update existing content
+// @Description  Update existing content (supports partial updates)
 // @Tags         contents
 // @Accept       json
 // @Produce      json
-// @Param        id       path      int             true  "Content ID"
-// @Param        content  body      domain.Content  true  "Content"
+// @Param        id       path      int                      true  "Content ID"
+// @Param        content  body      UpdateContentRequest  true  "Content (partial fields allowed)"
 // @Success      200      {object}  ContentResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
@@ -151,41 +158,81 @@ func (h *ContentHandler) Update(c server.Context) {
 		return
 	}
 
-	var content domain.Content
-	if err := c.Bind(&content); err != nil {
+	// Fetch the current content to merge updates
+	existing, err := h.CUsecase.GetByID(c.Request().Context(), id)
+	if err != nil {
+		h.Logger.Error(c.Request().Context(), "failed to fetch existing content", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		return
+	}
+
+	var req UpdateContentRequest
+	if err := c.Bind(&req); err != nil {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	content.ID = id
 
-	if err := h.CUsecase.Update(c.Request().Context(), &content); err != nil {
+	// Merge: only update fields that are provided in the request
+	if req.Title != nil {
+		existing.Title = req.Title
+	}
+	if req.TextData != nil {
+		existing.TextData = req.TextData
+	}
+	if req.OCRText != nil {
+		existing.OCRText = req.OCRText
+	}
+	if req.Caption != nil {
+		existing.Caption = req.Caption
+	}
+	if req.Link != nil {
+		existing.Link = req.Link
+	}
+	if req.Type != nil {
+		existing.Type = domain.ContentType(*req.Type)
+	}
+	if req.IsHidden != nil {
+		existing.IsHidden = *req.IsHidden
+	}
+
+	if err := h.CUsecase.Update(c.Request().Context(), existing); err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to update content", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, ToContentResponse(&content))
+	updatedContent, err := h.CUsecase.GetByID(c.Request().Context(), id)
+	if err != nil {
+		h.Logger.Error(c.Request().Context(), "failed to fetch updated content", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, ToContentResponse(updatedContent))
 }
 
 // AdminList godoc
 // @Summary      List all content for admin
-// @Description  List all content including hidden ones
+// @Description  List all content including hidden ones, with optional search/filter
 // @Tags         admin-contents
 // @Accept      json
 // @Produce    json
 // @Param       page      query  int     false  "Page number (1-based)"
 // @Param       page_size query  int     false  "Items per page (default 20, max 100)"
+// @Param       q         query  string  false  "Search keyword"
+// @Param       type      query  string  false  "Content type filter (image, text)"
+// @Param       visible   query  string  false  "Visibility filter: true (visible only), false (hidden only), or empty (all)"
 // @Success    200      {object}  AdminContentResponseWrapper
 // @Failure    500      {object}  map[string]string
 // @Security   ApiKeyAuth
 // @Router    /admin/contents [get]
-func (h *ContentHandler) AdminList(c server.Context) {
-	page, _ := strconv.ParseInt(c.Query("page"), 10, 64)
+func (h *ContentHandler) AdminList(ctx server.Context) {
+	page, _ := strconv.ParseInt(ctx.Query("page"), 10, 64)
 	if page < 1 {
 		page = 1
 	}
 
-	pageSize, _ := strconv.ParseInt(c.Query("page_size"), 10, 64)
+	pageSize, _ := strconv.ParseInt(ctx.Query("page_size"), 10, 64)
 	if pageSize < 1 {
 		pageSize = 20
 	}
@@ -196,16 +243,37 @@ func (h *ContentHandler) AdminList(c server.Context) {
 	offset := (page - 1) * pageSize
 
 	filter := domain.SearchFilter{IncludeHidden: true}
+
+	// Optional keyword search
+	if q := ctx.Query("q"); q != "" {
+		filter.Query = q
+	}
+
+	// Optional type filter
+	if typeStr := ctx.Query("type"); typeStr != "" {
+		ct := domain.ContentType(typeStr)
+		if !validContentTypes[ct] {
+			ctx.JSON(http.StatusBadRequest, map[string]string{"error": "invalid type: must be 'image' or 'text'"})
+			return
+		}
+		filter.ContentType = ct
+	}
+
+	// Optional visibility filter: "true" = visible only, "false" = hidden only, "" = all
+	if vis := ctx.Query("visible"); vis == "true" || vis == "false" {
+		filter.VisibilityFilter = vis
+	}
+
 	cursor := strconv.FormatInt(offset, 10)
 
-	result, err := h.CUsecase.Search(c.Request().Context(), filter, cursor, pageSize)
+	result, err := h.CUsecase.Search(ctx.Request().Context(), filter, cursor, pageSize)
 	if err != nil {
-		h.Logger.Error(c.Request().Context(), "failed to list contents", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		h.Logger.Error(ctx.Request().Context(), "failed to list contents", logger.Error(err))
+		ctx.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, ToAdminContentResponse(result, page, pageSize))
+	ctx.JSON(http.StatusOK, ToAdminContentResponse(result, page, pageSize))
 }
 
 // GetByID godoc

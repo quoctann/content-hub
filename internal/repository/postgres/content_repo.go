@@ -156,9 +156,17 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 
 	var conditions []string
 
-	// Exclude hidden content by default (unless IncludeHidden is true)
+	// Visibility filter logic:
+	// - IncludeHidden false (public API): always exclude hidden
+	// - IncludeHidden true + VisibilityFilter "true": only visible (is_hidden = false)
+	// - IncludeHidden true + VisibilityFilter "false": only hidden (is_hidden = true)
+	// - IncludeHidden true + VisibilityFilter "": include all (no condition)
 	if !filter.IncludeHidden {
 		conditions = append(conditions, "c.is_hidden = false")
+	} else if filter.VisibilityFilter == "true" {
+		conditions = append(conditions, "c.is_hidden = false")
+	} else if filter.VisibilityFilter == "false" {
+		conditions = append(conditions, "c.is_hidden = true")
 	}
 
 	// Build search condition from Keywords (preferred) or legacy Query

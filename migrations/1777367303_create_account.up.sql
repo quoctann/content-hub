@@ -10,18 +10,9 @@ CREATE TABLE IF NOT EXISTS account (
 
 CREATE INDEX IF NOT EXISTS idx_account_username ON account(username);
 
--- Trigger updated ate general used for all tables that have an updated_at column
-CREATE OR REPLACE FUNCTION trigger_set_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
 DROP TRIGGER IF EXISTS trg_account_updated_at ON account;
 
 CREATE TRIGGER trg_account_updated_at
     BEFORE UPDATE ON account
     FOR EACH ROW
-    EXECUTE FUNCTION trigger_set_updated_at();
+    EXECUTE FUNCTION update_updated_at_column();

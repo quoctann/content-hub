@@ -12,10 +12,14 @@ type ContentResponse struct {
 	ID        int64              `json:"id"`
 	Title     *string            `json:"title"`
 	TextData  *string            `json:"text_data"`
+	OCRText   *string            `json:"ocr_text"`
+	Caption   *string            `json:"caption"`
 	Link      *string            `json:"link"`
 	Type      domain.ContentType `json:"type"`
 	Rank      float64            `json:"rank"`
+	IsHidden  bool               `json:"is_hidden"`
 	CreatedAt *time.Time         `json:"created_at"`
+	UpdatedAt *time.Time         `json:"updated_at"`
 }
 
 // ToContentResponse converts a domain.Content to ContentResponse.
@@ -24,10 +28,14 @@ func ToContentResponse(c *domain.Content) *ContentResponse {
 		ID:        c.ID,
 		Title:     c.Title,
 		TextData:  c.TextData,
+		OCRText:   c.OCRText,
+		Caption:   c.Caption,
 		Link:      c.Link,
 		Type:      c.Type,
 		Rank:      c.Rank,
+		IsHidden:  c.IsHidden,
 		CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt,
 	}
 }
 

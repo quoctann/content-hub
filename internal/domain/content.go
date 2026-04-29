@@ -29,11 +29,12 @@ type Content struct {
 
 // SearchFilter holds optional filters for the Search operation.
 type SearchFilter struct {
-	Query         string
-	Keywords      []string
-	MatchType     string // "and" or "or", default "or"
-	ContentType   ContentType
-	IncludeHidden bool // Include hidden content in results
+	Query            string
+	Keywords         []string
+	MatchType        string // "and" or "or", default "or"
+	ContentType      ContentType
+	IncludeHidden    bool   // Include hidden content in results
+	VisibilityFilter string // "visible", "hidden", or "" (all) — only meaningful when IncludeHidden is true
 }
 
 // PaginationMeta holds pagination metadata for paginated responses
