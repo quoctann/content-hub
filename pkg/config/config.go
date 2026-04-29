@@ -33,6 +33,7 @@ type Database struct {
 	Password       string `mapstructure:"password"`
 	Name           string `mapstructure:"name"`
 	SSLMode        string `mapstructure:"ssl_mode"`
+	Schema         string `mapstructure:"schema"`
 	AutoMigrate    bool   `mapstructure:"auto_migrate"`
 	MigrationsPath string `mapstructure:"migrations_path"`
 }
@@ -40,6 +41,8 @@ type Database struct {
 type Security struct {
 	APIKey         string `mapstructure:"api_key"`
 	AllowedOrigins string `mapstructure:"allow_origins"`
+	JWTSecret      string `mapstructure:"jwt_secret"`
+	JWTExpiry      string `mapstructure:"jwt_expiry"`
 }
 
 // isFileNotFoundError checks if the error indicates a file not found.

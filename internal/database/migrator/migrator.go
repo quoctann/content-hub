@@ -42,7 +42,7 @@ func (mig *GolangMigrateAdapter) Up() error {
 
 // Down rolls back the most recent migration.
 func (mig *GolangMigrateAdapter) Down() error {
-	if err := mig.m.Down(); err != nil && err != migrate.ErrNoChange {
+	if err := mig.m.Steps(-1); err != nil && err != migrate.ErrNoChange {
 		return err
 	}
 	return nil

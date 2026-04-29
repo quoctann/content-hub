@@ -21,17 +21,21 @@ type Content struct {
 	Link      *string     `json:"link"`
 	FileName  *string     `json:"-"` // Internal use only, not exposed in API response
 	Type      ContentType `json:"type"`
+	IsHidden  bool        `json:"is_hidden"`
 	Rank      float64     `json:"rank"` // Relevance rank from FTS, 0 if no search query
 	CreatedAt *time.Time  `json:"created_at"`
 	UpdatedAt *time.Time  `json:"updated_at"`
+	DeletedAt *time.Time  `json:"deleted_at,omitempty"`
 }
 
 // SearchFilter holds optional filters for the Search operation.
 type SearchFilter struct {
-	Query       string
-	Keywords    []string
-	MatchType   string // "and" or "or", default "or"
-	ContentType ContentType
+	Query            string
+	Keywords         []string
+	MatchType        string // "and" or "or", default "or"
+	ContentType      ContentType
+	IncludeHidden    bool   // Include hidden content in results
+	VisibilityFilter string // "visible", "hidden", or "" (all) — only meaningful when IncludeHidden is true
 }
 
 // PaginationMeta holds pagination metadata for paginated responses
@@ -52,11 +56,19 @@ type ContentSearchResult struct {
 type ContentRepository interface {
 	Create(ctx context.Context, content *Content) error
 	Update(ctx context.Context, content *Content) error
+	Delete(ctx context.Context, id int64) error
+	DeleteMany(ctx context.Context, ids []int64) error
+	GetByID(ctx context.Context, id int64) (*Content, error)
+	SetHidden(ctx context.Context, id int64, hidden bool) error
 	Search(ctx context.Context, filter SearchFilter, cursor string, num int64) ([]Content, int64, error)
 }
 
 type ContentUsecase interface {
 	Create(ctx context.Context, content *Content) error
 	Update(ctx context.Context, content *Content) error
+	Delete(ctx context.Context, id int64) error
+	DeleteMany(ctx context.Context, ids []int64) error
+	GetByID(ctx context.Context, id int64) (*Content, error)
+	SetHidden(ctx context.Context, id int64, hidden bool) error
 	Search(ctx context.Context, filter SearchFilter, cursor string, num int64) (*ContentSearchResult, error)
 }

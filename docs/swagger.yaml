@@ -7,8 +7,12 @@ definitions:
         type: string
       created_at:
         type: string
+      deleted_at:
+        type: string
       id:
         type: integer
+      is_hidden:
+        type: boolean
       link:
         type: string
       ocr_text:
@@ -35,13 +39,39 @@ definitions:
     x-enum-varnames:
     - Text
     - Image
+  http.AdminContentResponseWrapper:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/http.ContentResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/http.AdminPaginationResponse'
+    type: object
+  http.AdminPaginationResponse:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total_count:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
   http.ContentResponse:
     properties:
+      caption:
+        type: string
       created_at:
         type: string
       id:
         type: integer
+      is_hidden:
+        type: boolean
       link:
+        type: string
+      ocr_text:
         type: string
       rank:
         type: number
@@ -51,6 +81,8 @@ definitions:
         type: string
       type:
         $ref: '#/definitions/domain.ContentType'
+      updated_at:
+        type: string
     type: object
   http.ContentSearchResponseWrapper:
     properties:
@@ -74,6 +106,28 @@ definitions:
       total_count:
         type: integer
     type: object
+  http.ToggleHideRequest:
+    properties:
+      hidden:
+        type: boolean
+    type: object
+  http.UpdateContentRequest:
+    properties:
+      caption:
+        type: string
+      is_hidden:
+        type: boolean
+      link:
+        type: string
+      ocr_text:
+        type: string
+      text_data:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -81,6 +135,177 @@ info:
   title: Content Hub API
   version: "1.0"
 paths:
+  /admin/contents:
+    get:
+      consumes:
+      - application/json
+      description: List all content including hidden ones, with optional search/filter
+      parameters:
+      - description: Page number (1-based)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 20, max 100)
+        in: query
+        name: page_size
+        type: integer
+      - description: Search keyword
+        in: query
+        name: q
+        type: string
+      - description: Content type filter (image, text)
+        in: query
+        name: type
+        type: string
+      - description: 'Visibility filter: true (visible only), false (hidden only),
+          or empty (all)'
+        in: query
+        name: visible
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.AdminContentResponseWrapper'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List all content for admin
+      tags:
+      - admin-contents
+  /admin/contents/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Permanently delete a content entry
+      parameters:
+      - description: Content ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete content
+      tags:
+      - admin-contents
+    get:
+      consumes:
+      - application/json
+      description: Get a single content entry by its ID
+      parameters:
+      - description: Content ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.ContentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get content by ID
+      tags:
+      - admin-contents
+  /admin/contents/{id}/hide:
+    patch:
+      consumes:
+      - application/json
+      description: Set content as hidden or visible
+      parameters:
+      - description: Content ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Hidden state
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.ToggleHideRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.ContentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Toggle content visibility
+      tags:
+      - admin-contents
   /contents:
     get:
       consumes:
@@ -175,19 +400,19 @@ paths:
     put:
       consumes:
       - application/json
-      description: Update existing content
+      description: Update existing content (supports partial updates)
       parameters:
       - description: Content ID
         in: path
         name: id
         required: true
         type: integer
-      - description: Content
+      - description: Content (partial fields allowed)
         in: body
         name: content
         required: true
         schema:
-          $ref: '#/definitions/domain.Content'
+          $ref: '#/definitions/http.UpdateContentRequest'
       produces:
       - application/json
       responses:

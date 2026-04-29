@@ -32,6 +32,30 @@ func (u *contentUsecase) Update(ctx context.Context, content *domain.Content) er
 	return u.contentRepo.Update(ctx, content)
 }
 
+func (u *contentUsecase) Delete(ctx context.Context, id int64) error {
+	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
+	defer cancel()
+	return u.contentRepo.Delete(ctx, id)
+}
+
+func (u *contentUsecase) DeleteMany(ctx context.Context, ids []int64) error {
+	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
+	defer cancel()
+	return u.contentRepo.DeleteMany(ctx, ids)
+}
+
+func (u *contentUsecase) GetByID(ctx context.Context, id int64) (*domain.Content, error) {
+	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
+	defer cancel()
+	return u.contentRepo.GetByID(ctx, id)
+}
+
+func (u *contentUsecase) SetHidden(ctx context.Context, id int64, hidden bool) error {
+	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
+	defer cancel()
+	return u.contentRepo.SetHidden(ctx, id, hidden)
+}
+
 func (u *contentUsecase) Search(ctx context.Context, filter domain.SearchFilter, cursor string, num int64) (*domain.ContentSearchResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
 	defer cancel()

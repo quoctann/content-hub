@@ -22,6 +22,10 @@ func RunMigrations(deps *Dependencies) error {
 		deps.Config.Database.SSLMode,
 	)
 
+	if deps.Config.Database.Schema != "" {
+		dbURL = fmt.Sprintf("%s&search_path=%s", dbURL, deps.Config.Database.Schema)
+	}
+
 	migrationsPath := deps.Config.Database.MigrationsPath
 	if migrationsPath == "" {
 		migrationsPath = "migrations"

@@ -47,11 +47,19 @@ func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
 	defer tx.Rollback(ctx)
 
 	query := `
-		UPDATE content
-		SET title = $1, text_data = $2, ocr_text = $3, caption = $4, link = $5, file_name = $6, type = $7, updated_at = NOW()
-		WHERE id = $8
+		UPDATE content SET
+			title = $1,
+			text_data = $2,
+			ocr_text = $3,
+			caption = $4,
+			link = $5,
+			file_name = $6,
+			type = $7,
+			is_hidden = $8,
+			updated_at = NOW()
+		WHERE id = $9 AND deleted_at IS NULL
 	`
-	tag, err := tx.Exec(ctx, query, c.Title, c.TextData, c.OCRText, c.Caption, c.Link, c.FileName, c.Type, c.ID)
+	tag, err := tx.Exec(ctx, query, c.Title, c.TextData, c.OCRText, c.Caption, c.Link, c.FileName, c.Type, c.IsHidden, c.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update content: %w", err)
 	}
@@ -60,6 +68,56 @@ func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
 	}
 
 	return tx.Commit(ctx)
+}
+
+func (r *contentRepo) Delete(ctx context.Context, id int64) error {
+	query := `UPDATE content SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
+	tag, err := r.db.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to soft-delete content: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("content not found or already deleted")
+	}
+	return nil
+}
+
+func (r *contentRepo) DeleteMany(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	query := `UPDATE content SET deleted_at = NOW(), updated_at = NOW() WHERE id = ANY($1) AND deleted_at IS NULL`
+	_, err := r.db.Exec(ctx, query, ids)
+	if err != nil {
+		return fmt.Errorf("failed to bulk soft-delete content: %w", err)
+	}
+	return nil
+}
+
+func (r *contentRepo) GetByID(ctx context.Context, id int64) (*domain.Content, error) {
+	query := `
+		SELECT id, title, text_data, ocr_text, caption, link, type, is_hidden, created_at, updated_at
+		FROM content
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+	var c domain.Content
+	err := r.db.QueryRow(ctx, query, id).Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.IsHidden, &c.CreatedAt, &c.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get content: %w", err)
+	}
+	return &c, nil
+}
+
+func (r *contentRepo) SetHidden(ctx context.Context, id int64, hidden bool) error {
+	query := `UPDATE content SET is_hidden = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL`
+	tag, err := r.db.Exec(ctx, query, hidden, id)
+	if err != nil {
+		return fmt.Errorf("failed to set hidden: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("content not found")
+	}
+	return nil
 }
 
 func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cursor string, num int64) ([]domain.Content, int64, error) {
@@ -96,7 +154,7 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 	}
 
 	// Build SELECT clause with ts_rank always included (0 if no search query)
-	selectClause := "DISTINCT c.id, c.title, c.text_data, c.ocr_text, c.caption, c.link, c.type, c.created_at, c.updated_at"
+	selectClause := "DISTINCT c.id, c.title, c.text_data, c.ocr_text, c.caption, c.link, c.type, c.is_hidden, c.created_at, c.updated_at"
 	if hasSearchQuery {
 		selectClause += fmt.Sprintf(", ts_rank(search_vector, %s('simple', unaccent($1))) as rank", tsqueryFunc)
 	} else {
@@ -109,6 +167,20 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 	`, selectClause)
 
 	var conditions []string
+	conditions = append(conditions, "c.deleted_at IS NULL")
+
+	// Visibility filter logic:
+	// - IncludeHidden false (public API): always exclude hidden
+	// - IncludeHidden true + VisibilityFilter "true": only visible (is_hidden = false)
+	// - IncludeHidden true + VisibilityFilter "false": only hidden (is_hidden = true)
+	// - IncludeHidden true + VisibilityFilter "": include all (no condition)
+	if !filter.IncludeHidden {
+		conditions = append(conditions, "c.is_hidden = false")
+	} else if filter.VisibilityFilter == "true" {
+		conditions = append(conditions, "c.is_hidden = false")
+	} else if filter.VisibilityFilter == "false" {
+		conditions = append(conditions, "c.is_hidden = true")
+	}
 
 	// Build search condition from Keywords (preferred) or legacy Query
 	if len(filter.Keywords) > 0 {
@@ -136,7 +208,7 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 
 	// First, get total count
 	countQuery := fmt.Sprintf("SELECT COUNT(DISTINCT c.id) FROM content c%s", whereClause)
-	countArgs := args[:len(args)] // Use same args (without limit/offset)
+	countArgs := args[:] // Use same args (without limit/offset)
 	var totalCount int64
 	err := r.db.QueryRow(ctx, countQuery, countArgs...).Scan(&totalCount)
 	if err != nil {
@@ -158,7 +230,7 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 	for rows.Next() {
 		var c domain.Content
 		var rank float64
-		err := rows.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.CreatedAt, &c.UpdatedAt, &rank)
+		err := rows.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.IsHidden, &c.CreatedAt, &c.UpdatedAt, &rank)
 		if err != nil {
 			return nil, 0, fmt.Errorf("scan failed: %w", err)
 		}

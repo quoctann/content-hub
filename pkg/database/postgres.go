@@ -26,6 +26,13 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
+	if cfg.Database.Schema != "" {
+		if poolConfig.ConnConfig.RuntimeParams == nil {
+			poolConfig.ConnConfig.RuntimeParams = make(map[string]string)
+		}
+		poolConfig.ConnConfig.RuntimeParams["search_path"] = cfg.Database.Schema
+	}
+
 	// Set some reasonable defaults
 	poolConfig.MaxConns = 10
 	poolConfig.MinConns = 2
