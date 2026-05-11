@@ -20,6 +20,8 @@ type Router interface {
 	PATCH(path string, handler HandlerFunc)
 	// Group creates a sub‑router with a common prefix.
 	Group(path string) RouterGroup
+	// Use registers one or more middleware functions globally.
+	Use(middleware ...MiddlewareFunc)
 }
 
 // RouterGroup is a sub‑router that can also register middleware.
@@ -50,6 +52,8 @@ type Context interface {
 	Status(code int)
 	// Request returns the underlying *http.Request.
 	Request() *http.Request
+	// SetHeader sets a response header.
+	SetHeader(key, value string)
 }
 
 // HandlerFunc is the signature for route handlers.

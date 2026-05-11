@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/quoctann/content-hub/docs"
 	"github.com/quoctann/content-hub/pkg/server"
@@ -29,11 +30,12 @@ func RegisterRoutes(r server.Router) {
 	})
 
 	// Swagger
-	// Swagger (this still needs gin.HandlerFunc for now as it's a 3rd party lib)
-	// We handle this by casting to GinRouter if we know it's Gin, or providing an adapter.
-	// For now, we'll keep it simple if possible or just use the raw engine if needed in bootstrap.
+	// Swagger — only available in non-production environments
 	if gr, ok := r.(*server.GinRouter); ok {
-		gr.Engine().GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+		// In production, gin runs in ReleaseMode — skip swagger to avoid exposing API docs.
+		if gin.Mode() != gin.ReleaseMode {
+			gr.Engine().GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+		}
 	}
 }
 

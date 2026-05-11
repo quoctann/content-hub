@@ -44,6 +44,12 @@ func (r *GinRouter) Group(path string) RouterGroup {
 	return &GinRouterGroup{group: r.engine.Group(path)}
 }
 
+func (r *GinRouter) Use(middleware ...MiddlewareFunc) {
+	for _, m := range middleware {
+		r.engine.Use(wrapMiddleware(m))
+	}
+}
+
 // GinRouterGroup implements the RouterGroup interface.
 type GinRouterGroup struct {
 	group *gin.RouterGroup
@@ -108,6 +114,10 @@ func (c *GinContext) Request() *http.Request {
 	return c.ctx.Request
 }
 
+func (c *GinContext) SetHeader(key, value string) {
+	c.ctx.Header(key, value)
+}
+
 // Helper functions to wrap handlers and middleware
 
 func wrapHandler(h HandlerFunc) gin.HandlerFunc {
@@ -123,7 +133,7 @@ func wrapMiddleware(m MiddlewareFunc) gin.HandlerFunc {
 			if httpErr, ok := err.(*HTTPError); ok {
 				c.AbortWithStatusJSON(httpErr.Code, gin.H{"error": httpErr.Message})
 			} else {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			}
 			return
 		}

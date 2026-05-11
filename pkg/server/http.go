@@ -48,10 +48,11 @@ func NewHTTPServer(opts ...HTTPOption) *HTTPServer {
 	}
 
 	s.httpServer = &http.Server{
-		Addr:         s.config.Addr,
-		Handler:      s.engine,
-		ReadTimeout:  s.config.ReadTimeout,
-		WriteTimeout: s.config.WriteTimeout,
+		Addr:           s.config.Addr,
+		Handler:        s.engine,
+		ReadTimeout:    s.config.ReadTimeout,
+		WriteTimeout:   s.config.WriteTimeout,
+		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 
 	return s

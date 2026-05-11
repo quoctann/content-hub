@@ -39,10 +39,15 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 	poolConfig.MaxConnLifetime = time.Hour
 	poolConfig.MaxConnIdleTime = 30 * time.Minute
 
-	// Configure tracer
+	// Configure tracer — use DEBUG only in non-production environments to avoid
+	// exposing query parameters containing sensitive data in logs.
+	dbLogLevel := tracelog.LogLevelWarn
+	if cfg.Server.AppEnv == "local" || cfg.Server.AppEnv == "dev" {
+		dbLogLevel = tracelog.LogLevelDebug
+	}
 	dbTracer := &tracelog.TraceLog{
 		Logger:   NewLoggerAdapter(l),
-		LogLevel: tracelog.LogLevelDebug,
+		LogLevel: dbLogLevel,
 	}
 	poolConfig.ConnConfig.Tracer = dbTracer
 

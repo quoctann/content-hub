@@ -125,7 +125,7 @@ func (h *ContentHandler) Search(c server.Context) {
 func (h *ContentHandler) Store(c server.Context) {
 	var content domain.Content
 	if err := c.Bind(&content); err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *ContentHandler) Update(c server.Context) {
 
 	var req UpdateContentRequest
 	if err := c.Bind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
@@ -367,7 +367,7 @@ func (h *ContentHandler) ToggleHide(c server.Context) {
 
 	var req ToggleHideRequest
 	if err := c.Bind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
@@ -390,7 +390,7 @@ func (h *ContentHandler) ToggleHide(c server.Context) {
 func (h *ContentHandler) BulkDelete(c server.Context) {
 	var req BulkDeleteRequest
 	if err := c.Bind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
