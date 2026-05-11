@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/quoctann/content-hub/pkg/config"
@@ -27,10 +28,10 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 	}
 
 	if cfg.Database.Schema != "" {
-		if poolConfig.ConnConfig.RuntimeParams == nil {
-			poolConfig.ConnConfig.RuntimeParams = make(map[string]string)
+		poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+			_, err := conn.Exec(ctx, fmt.Sprintf("SET search_path TO %s", cfg.Database.Schema))
+			return err
 		}
-		poolConfig.ConnConfig.RuntimeParams["search_path"] = cfg.Database.Schema
 	}
 
 	// Set some reasonable defaults
@@ -56,6 +57,24 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	l.InfoWithoutCtx("Successfully connected to Postgres", logger.String("db_name", cfg.Database.Name))
+	// Verify schema
+	var dbName, user, searchPath string
+	var schemas []string
+
+	err = pool.
+		QueryRow(context.Background(), `SELECT current_database(), current_user, current_setting('search_path'), current_schemas(false)`).
+		Scan(&dbName, &user, &searchPath, &schemas)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify db config: %w", err)
+	}
+
+	l.InfoWithoutCtx(
+		"Connected to Postgres with runtime config",
+		logger.String("db", dbName),
+		logger.String("user", user),
+		logger.String("search_path", searchPath),
+		logger.Any("current_schemas", schemas),
+	)
+
 	return pool, nil
 }
