@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,9 +57,10 @@ func JWTAuth(cfg JWTAuthConfig) server.MiddlewareFunc {
 	}
 }
 
-func GenerateToken(secret string, expiry time.Duration, issuer string, role string) (string, error) {
+func GenerateToken(secret string, expiry time.Duration, issuer string, role string, userID int64) (string, error) {
 	claims := JWTClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   strconv.FormatInt(userID, 10),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    issuer,

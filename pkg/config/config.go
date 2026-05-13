@@ -109,5 +109,23 @@ func LoadConfigWithEnv(env string) (*Config, error) {
 		return nil, fmt.Errorf("unable to decode into struct: %w", err)
 	}
 
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+// Validate performs security checks on the loaded configuration.
+func (c *Config) Validate() error {
+	const defaultJWTSecret = "your-secret-key-change-in-production"
+
+	if c.Security.APIKey == "" {
+		return errors.New("security: SECURITY_API_KEY is not configured; refusing to start")
+	}
+	if c.Security.JWTSecret == "" || c.Security.JWTSecret == defaultJWTSecret {
+		return errors.New("security: SECURITY_JWT_SECRET is not configured or uses the default placeholder; refusing to start")
+	}
+
+	return nil
 }

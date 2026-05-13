@@ -28,7 +28,7 @@ type LoginResponse struct {
 	ExpiresIn    int64  `json:"expires_in"`
 }
 
-func NewAccountHandler(r server.Router, au domain.AccountUsecase, cfg *config.Config, l logger.ILogger) {
+func NewAccountHandler(r server.RouterGroup, au domain.AccountUsecase, cfg *config.Config, l logger.ILogger) {
 	handler := &AccountHandler{
 		AUsecase: au,
 		Config:   cfg,
@@ -61,6 +61,7 @@ func (h *AccountHandler) Login(c server.Context) {
 		expiry,
 		"content-hub",
 		account.Role,
+		account.ID,
 	)
 	if err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to generate token", logger.Error(err))
@@ -73,6 +74,7 @@ func (h *AccountHandler) Login(c server.Context) {
 		expiry*7,
 		"content-hub",
 		account.Role,
+		account.ID,
 	)
 	if err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to generate refresh token", logger.Error(err))

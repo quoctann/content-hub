@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"time"
 
+	"golang.org/x/time/rate"
+
 	httpDelivery "github.com/quoctann/content-hub/internal/delivery/http"
 	"github.com/quoctann/content-hub/internal/repository/postgres"
 	"github.com/quoctann/content-hub/internal/usecase"
@@ -32,14 +34,14 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 	}
 	accountUsecase := usecase.NewAccountUsecase(accountRepo, deps.Config.Security.JWTSecret, jwtExpiry)
 
-	// Public routes (Login)
-	httpDelivery.NewAccountHandler(router, accountUsecase, deps.Config, deps.Logger)
+	// Public routes (Login) — rate limited to 5 attempts per minute per IP
+	loginGroup := router.Group("/")
+	loginGroup.Use(middleware.RateLimiter(rate.Every(time.Minute/5), 5))
+	httpDelivery.NewAccountHandler(loginGroup, accountUsecase, deps.Config, deps.Logger)
 
 	// Protected content routes
 	contentGroup := router.Group("/")
-	if deps.Config.Security.APIKey != "" {
-		contentGroup.Use(middleware.APIKeyAuth(deps.Config.Security.APIKey))
-	}
+	contentGroup.Use(middleware.APIKeyAuth(deps.Config.Security.APIKey))
 	httpDelivery.NewContentHandler(contentGroup, contentUsecase, deps.Logger)
 
 	// Protected routes (JWT auth)
