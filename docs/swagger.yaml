@@ -93,6 +93,23 @@ definitions:
       pagination:
         $ref: '#/definitions/http.PaginationMetaResponse'
     type: object
+  http.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  http.LoginResponse:
+    properties:
+      csrf_token:
+        type: string
+      expires_in:
+        type: integer
+    type: object
   http.PaginationMetaResponse:
     properties:
       cursor:
@@ -104,6 +121,13 @@ definitions:
       page_size:
         type: integer
       total_count:
+        type: integer
+    type: object
+  http.RefreshResponse:
+    properties:
+      csrf_token:
+        type: string
+      expires_in:
         type: integer
     type: object
   http.ToggleHideRequest:
@@ -135,6 +159,91 @@ info:
   title: Content Hub API
   version: "1.0"
 paths:
+  /account/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate with username and password, returns access/refresh
+        tokens in cookies
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Login
+      tags:
+      - account
+  /account/logout:
+    post:
+      consumes:
+      - application/json
+      description: Clear access/refresh tokens cookies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Logout
+      tags:
+      - account
+  /account/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Refresh access token using refresh token from cookie
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.RefreshResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Refresh token
+      tags:
+      - account
   /admin/contents:
     get:
       consumes:

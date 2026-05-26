@@ -21,6 +21,9 @@ func RegisterRoutes(r server.Router) {
 			"status": "ok",
 		})
 	})
+	r.HEAD("/health", func(c server.Context) {
+		c.Status(http.StatusOK)
+	})
 
 	// Leapcell health check
 	r.GET("/kaithheathcheck", func(c server.Context) {

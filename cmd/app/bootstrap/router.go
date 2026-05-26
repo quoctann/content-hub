@@ -41,15 +41,16 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 
 	// Protected content routes
 	contentGroup := router.Group("/")
-	contentGroup.Use(middleware.APIKeyAuth(deps.Config.Security.APIKey))
+	// contentGroup.Use(middleware.APIKeyAuth(deps.Config.Security.APIKey))
 	httpDelivery.NewContentHandler(contentGroup, contentUsecase, deps.Logger)
 
-	// Protected routes (JWT auth)
+	// Protected routes (JWT auth + CSRF)
 	adminGroup := router.Group("/admin/contents")
 	adminGroup.Use(middleware.JWTAuth(middleware.JWTAuthConfig{
 		Secret: deps.Config.Security.JWTSecret,
 		Expiry: jwtExpiry, // Re-use the parsed jwtExpiry variable
 		Issuer: "content-hub",
 	}))
+	adminGroup.Use(middleware.CSRFProtection())
 	httpDelivery.NewAdminContentHandler(adminGroup, contentUsecase, deps.Logger)
 }

@@ -28,7 +28,7 @@ func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 			c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization, Accept")
+			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization, Accept, X-CSRF-Token")
 			c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Length, X-Total-Count")
 			c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 		}

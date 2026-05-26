@@ -18,6 +18,8 @@ type Router interface {
 	DELETE(path string, handler HandlerFunc)
 	// PATCH registers a handler for HTTP PATCH requests.
 	PATCH(path string, handler HandlerFunc)
+	// HEAD registers a handler for HTTP HEAD requests.
+	HEAD(path string, handler HandlerFunc)
 	// Group creates a sub‑router with a common prefix.
 	Group(path string) RouterGroup
 	// Use registers one or more middleware functions globally.
@@ -31,6 +33,8 @@ type RouterGroup interface {
 	PUT(path string, handler HandlerFunc)
 	DELETE(path string, handler HandlerFunc)
 	PATCH(path string, handler HandlerFunc)
+	// HEAD registers a handler for HTTP HEAD requests.
+	HEAD(path string, handler HandlerFunc)
 	// Use registers one or more middleware functions for this group.
 	Use(middleware ...MiddlewareFunc)
 	// Group creates a sub-router with a common prefix.
@@ -54,6 +58,17 @@ type Context interface {
 	Request() *http.Request
 	// SetHeader sets a response header.
 	SetHeader(key, value string)
+	// SetCookie sets a cookie in the response. Parameters mirror http.SetCookie
+	//
+	// name, value: application data to store in the cookie
+	// maxAge: in seconds, if not set, once browser closed, cookie will be deleted
+	// path: the URL path for which the cookie is valid, e.g "/admin" or "/"
+	// secure: if true then cookie only sent over HTTPS
+	// httpOnly: if true then cookie is inaccessible to JavaScript (prevent XSS)
+	SetCookie(name, value string, maxAge int, path string, secure, httpOnly bool)
+	Cookie(name string) (string, error)
+	SetValue(key string, value interface{})
+	GetValue(key string) interface{}
 }
 
 // HandlerFunc is the signature for route handlers.

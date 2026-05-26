@@ -21,3 +21,4 @@ security:
   allow_origins: "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
   jwt_secret: "your-secret-key-change-in-production"
   jwt_expiry: "24h"
+  csp_connect_src: ""
