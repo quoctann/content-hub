@@ -47,7 +47,17 @@ func NewApp(env string) (*App, error) {
 		ginRouter.Use(middleware.CORSMiddleware(app.deps.Config))
 
 		// Apply security headers middleware
-		srv.Router().Use(middleware.SecurityHeaders(app.deps.Config.Security.CSPConnectSrc))
+		srv.Router().Use(middleware.SecurityHeaders(middleware.CSPOptions{
+			DefaultSrc: app.deps.Config.Security.CSPDefaultSrc,
+			ScriptSrc:  app.deps.Config.Security.CSPScriptSrc,
+			StyleSrc:   app.deps.Config.Security.CSPStyleSrc,
+			ImgSrc:     app.deps.Config.Security.CSPImgSrc,
+			FontSrc:    app.deps.Config.Security.CSPFontSrc,
+			ConnectSrc: app.deps.Config.Security.CSPConnectSrc,
+			FrameSrc:   app.deps.Config.Security.CSPFrameSrc,
+			MediaSrc:   app.deps.Config.Security.CSPMediaSrc,
+			ObjectSrc:  app.deps.Config.Security.CSPObjectSrc,
+		}))
 
 		// Auto-migration
 		if err := RunMigrations(app.deps); err != nil {

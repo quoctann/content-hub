@@ -43,7 +43,15 @@ type Security struct {
 	AllowedOrigins string `mapstructure:"allow_origins"`
 	JWTSecret      string `mapstructure:"jwt_secret"`
 	JWTExpiry      string `mapstructure:"jwt_expiry"`
+	CSPDefaultSrc  string `mapstructure:"csp_default_src"`
+	CSPScriptSrc   string `mapstructure:"csp_script_src"`
+	CSPStyleSrc    string `mapstructure:"csp_style_src"`
+	CSPImgSrc      string `mapstructure:"csp_img_src"`
+	CSPFontSrc     string `mapstructure:"csp_font_src"`
 	CSPConnectSrc  string `mapstructure:"csp_connect_src"`
+	CSPFrameSrc    string `mapstructure:"csp_frame_src"`
+	CSPMediaSrc    string `mapstructure:"csp_media_src"`
+	CSPObjectSrc   string `mapstructure:"csp_object_src"`
 }
 
 // isFileNotFoundError checks if the error indicates a file not found.
