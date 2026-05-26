@@ -40,6 +40,10 @@ func (r *GinRouter) PATCH(path string, handler HandlerFunc) {
 	r.engine.PATCH(path, wrapHandler(handler))
 }
 
+func (r *GinRouter) HEAD(path string, handler HandlerFunc) {
+	r.engine.HEAD(path, wrapHandler(handler))
+}
+
 func (r *GinRouter) Group(path string) RouterGroup {
 	return &GinRouterGroup{group: r.engine.Group(path)}
 }
@@ -73,6 +77,10 @@ func (g *GinRouterGroup) DELETE(path string, handler HandlerFunc) {
 
 func (g *GinRouterGroup) PATCH(path string, handler HandlerFunc) {
 	g.group.PATCH(path, wrapHandler(handler))
+}
+
+func (g *GinRouterGroup) HEAD(path string, handler HandlerFunc) {
+	g.group.HEAD(path, wrapHandler(handler))
 }
 
 func (g *GinRouterGroup) Use(middleware ...MiddlewareFunc) {

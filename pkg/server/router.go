@@ -18,6 +18,8 @@ type Router interface {
 	DELETE(path string, handler HandlerFunc)
 	// PATCH registers a handler for HTTP PATCH requests.
 	PATCH(path string, handler HandlerFunc)
+	// HEAD registers a handler for HTTP HEAD requests.
+	HEAD(path string, handler HandlerFunc)
 	// Group creates a sub‑router with a common prefix.
 	Group(path string) RouterGroup
 	// Use registers one or more middleware functions globally.
@@ -31,6 +33,8 @@ type RouterGroup interface {
 	PUT(path string, handler HandlerFunc)
 	DELETE(path string, handler HandlerFunc)
 	PATCH(path string, handler HandlerFunc)
+	// HEAD registers a handler for HTTP HEAD requests.
+	HEAD(path string, handler HandlerFunc)
 	// Use registers one or more middleware functions for this group.
 	Use(middleware ...MiddlewareFunc)
 	// Group creates a sub-router with a common prefix.

@@ -46,6 +46,18 @@ func NewAccountHandler(r server.RouterGroup, au domain.AccountUsecase, cfg *conf
 	r.POST("/account/logout", handler.Logout)
 }
 
+// Login godoc
+// @Summary      Login
+// @Description  Authenticate with username and password, returns access/refresh tokens in cookies
+// @Tags         account
+// @Accept       json
+// @Produce      json
+// @Param        request  body      LoginRequest    true  "Login credentials"
+// @Success      200      {object}  LoginResponse
+// @Failure      400      {object}  map[string]string
+// @Failure      401      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /account/login [post]
 func (h *AccountHandler) Login(c server.Context) {
 	var req LoginRequest
 	if err := c.Bind(&req); err != nil {
@@ -112,6 +124,16 @@ func (h *AccountHandler) Login(c server.Context) {
 	})
 }
 
+// Refresh godoc
+// @Summary      Refresh token
+// @Description  Refresh access token using refresh token from cookie
+// @Tags         account
+// @Accept       json
+// @Produce      json
+// @Success      200      {object}  RefreshResponse
+// @Failure      401      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /account/refresh [post]
 func (h *AccountHandler) Refresh(c server.Context) {
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil || refreshToken == "" {
@@ -169,6 +191,14 @@ func (h *AccountHandler) Refresh(c server.Context) {
 	})
 }
 
+// Logout godoc
+// @Summary      Logout
+// @Description  Clear access/refresh tokens cookies
+// @Tags         account
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Router       /account/logout [post]
 func (h *AccountHandler) Logout(c server.Context) {
 	isSecure := h.Config.Server.AppEnv != "local"
 
