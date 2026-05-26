@@ -23,6 +23,10 @@ func NewAccountUsecase(repo domain.AccountRepository, jwtSecret string, jwtExpir
 	}
 }
 
+// TODO: For future user onboarding, add failed_attempts and locked_until tracking
+// to prevent brute-force attacks against specific accounts. Consider adding
+// account lockout after N consecutive failed login attempts with a cooldown period.
+
 func (u *accountUsecase) Login(ctx context.Context, username, password string) (*domain.Account, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

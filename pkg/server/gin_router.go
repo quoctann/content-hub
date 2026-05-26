@@ -118,6 +118,27 @@ func (c *GinContext) SetHeader(key, value string) {
 	c.ctx.Header(key, value)
 }
 
+func (c *GinContext) SetCookie(name, value string, maxAge int, path string, secure, httpOnly bool) {
+	c.ctx.SetCookie(name, value, maxAge, path, "", secure, httpOnly)
+}
+
+func (c *GinContext) Cookie(name string) (string, error) {
+	cookie, err := c.ctx.Cookie(name)
+	if err != nil {
+		return "", err
+	}
+	return cookie, nil
+}
+
+func (c *GinContext) SetValue(key string, value interface{}) {
+	c.ctx.Set(key, value)
+}
+
+func (c *GinContext) GetValue(key string) interface{} {
+	val, _ := c.ctx.Get(key)
+	return val
+}
+
 // Helper functions to wrap handlers and middleware
 
 func wrapHandler(h HandlerFunc) gin.HandlerFunc {

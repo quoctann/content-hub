@@ -43,6 +43,7 @@ type Security struct {
 	AllowedOrigins string `mapstructure:"allow_origins"`
 	JWTSecret      string `mapstructure:"jwt_secret"`
 	JWTExpiry      string `mapstructure:"jwt_expiry"`
+	CSPConnectSrc  string `mapstructure:"csp_connect_src"`
 }
 
 // isFileNotFoundError checks if the error indicates a file not found.
@@ -118,12 +119,7 @@ func LoadConfigWithEnv(env string) (*Config, error) {
 
 // Validate performs security checks on the loaded configuration.
 func (c *Config) Validate() error {
-	const defaultJWTSecret = "your-secret-key-change-in-production"
-
-	if c.Security.APIKey == "" {
-		return errors.New("security: SECURITY_API_KEY is not configured; refusing to start")
-	}
-	if c.Security.JWTSecret == "" || c.Security.JWTSecret == defaultJWTSecret {
+	if c.Security.JWTSecret == "" {
 		return errors.New("security: SECURITY_JWT_SECRET is not configured or uses the default placeholder; refusing to start")
 	}
 
