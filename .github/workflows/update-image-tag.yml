@@ -1,0 +1,35 @@
+name: Update Image Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Short git SHA to deploy (e.g. 33acd5c)"
+        required: true
+        type: string
+
+jobs:
+  update-manifest:
+    name: Patch image tags and commit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout manifest repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.MANIFEST_REPO_TOKEN }}
+
+      # yq is pre-installed on ubuntu-latest
+      - name: Update backend image tag
+        run: |
+          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/${{ github.repository_owner }}/content-backend:${{ inputs.image_tag }}"' \
+            backend/manifest.yaml
+
+      - name: Commit and push updated manifests
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/manifest.yaml
+          git diff --cached --quiet || \
+            git commit -m "chore: deploy content@${{ inputs.image_tag }}"
+          git push
