@@ -58,7 +58,7 @@ jobs:
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: 'content-gitops',
-              workflow_id: 'update-image-tag.yml',
+              workflow_id: 'update-image-tag-be.yml',
               ref: 'main',
               inputs: {
                 image_tag: '${{ steps.tag.outputs.IMAGE_TAG }}'
