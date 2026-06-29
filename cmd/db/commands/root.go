@@ -28,7 +28,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&env, "env", "e", "local", "environment (local|dev|prod)")
+	rootCmd.PersistentFlags().StringVarP(&env, "env", "e", "", "environment (local|dev|prod)")
 	rootCmd.PersistentFlags().StringVarP(&migrationsPath, "path", "p", "migrations", "path to migrations folder")
 
 	// Register subcommands

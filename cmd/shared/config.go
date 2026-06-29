@@ -14,9 +14,6 @@ func LoadConfig(env string) (*config.Config, error) {
 	if env == "" {
 		env = os.Getenv("APP_ENV")
 	}
-	if env == "" {
-		env = "local"
-	}
 
 	cfg, err := config.LoadConfigWithEnv(env)
 	if err != nil {

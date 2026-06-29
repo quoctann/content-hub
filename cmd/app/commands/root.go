@@ -29,7 +29,10 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&env, "env", "e", "local", "environment (local|dev|prod)")
+	rootCmd.PersistentFlags().StringVarP(&env, "env", "e", "", "environment (local|dev|prod)")
+	if env == "" {
+		env = os.Getenv("APP_ENV")
+	}
 }
 
 func run(cmd *cobra.Command, args []string) {
