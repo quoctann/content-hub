@@ -89,6 +89,11 @@ func LoadConfigWithEnv(env string) (*Config, error) {
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
+
+	if err := bindEnv(v); err != nil {
+		return nil, fmt.Errorf("failed to bind env vars: %w", err)
+	}
+
 	// 3. Load configurations in order (cascading)
 
 	// First: General config file (base defaults)
@@ -133,3 +138,40 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+
+func bindEnv(v *viper.Viper) error {
+		envs := map[string]string{
+			"server.port":              "SERVER_PORT",
+			"app_env":                  "APP_ENV",
+			"logger.level":             "LOGGER_LEVEL",
+			"database.host":            "DATABASE_HOST",
+			"database.port":            "DATABASE_PORT",
+			"database.user":            "DATABASE_USER",
+			"database.password":        "DATABASE_PASSWORD",
+			"database.name":            "DATABASE_NAME",
+			"database.ssl_mode":        "DATABASE_SSL_MODE",
+			"database.schema":          "DATABASE_SCHEMA",
+			"database.auto_migrate":    "DATABASE_AUTO_MIGRATE",
+			"database.migrations_path": "DATABASE_MIGRATIONS_PATH",
+			"security.allow_origins":   "SECURITY_ALLOW_ORIGINS",
+			"security.jwt_secret":      "SECURITY_JWT_SECRET",
+			"security.jwt_expiry":      "SECURITY_JWT_EXPIRY",
+			"security.csp_default_src": "SECURITY_CSP_DEFAULT_SRC",
+			"security.csp_script_src":  "SECURITY_CSP_SCRIPT_SRC",
+			"security.csp_style_src":   "SECURITY_CSP_STYLE_SRC",
+			"security.csp_img_src":     "SECURITY_CSP_IMG_SRC",
+			"security.csp_font_src":    "SECURITY_CSP_FONT_SRC",
+			"security.csp_connect_src": "SECURITY_CSP_CONNECT_SRC",
+			"security.csp_frame_src":   "SECURITY_CSP_FRAME_SRC",
+			"security.csp_media_src":   "SECURITY_CSP_MEDIA_SRC",
+			"security.csp_object_src":  "SECURITY_CSP_OBJECT_SRC",
+		}
+	
+		for key, env := range envs {
+			if err := v.BindEnv(key, env); err != nil {
+				return err
+			}
+		}
+	
+		return nil
+	}
