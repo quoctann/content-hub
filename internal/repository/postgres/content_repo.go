@@ -156,7 +156,7 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 	// Build SELECT clause with ts_rank always included (0 if no search query)
 	selectClause := "DISTINCT c.id, c.title, c.text_data, c.ocr_text, c.caption, c.link, c.type, c.is_hidden, c.created_at, c.updated_at"
 	if hasSearchQuery {
-		selectClause += fmt.Sprintf(", ts_rank(search_vector, %s('simple', unaccent($1))) as rank", tsqueryFunc)
+		selectClause += fmt.Sprintf(", ts_rank(search_vector, %s('simple', public.unaccent($1))) as rank", tsqueryFunc)
 	} else {
 		selectClause += ", 0.0 as rank"
 	}
@@ -184,9 +184,9 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 
 	// Build search condition from Keywords (preferred) or legacy Query
 	if len(filter.Keywords) > 0 {
-		conditions = append(conditions, fmt.Sprintf("search_vector @@ %s('simple', unaccent($1))", tsqueryFunc))
+		conditions = append(conditions, fmt.Sprintf("search_vector @@ %s('simple', public.unaccent($1))", tsqueryFunc))
 	} else if filter.Query != "" {
-		conditions = append(conditions, "search_vector @@ plainto_tsquery('simple', unaccent($1))")
+		conditions = append(conditions, "search_vector @@ plainto_tsquery('simple', public.unaccent($1))")
 	}
 
 	if filter.ContentType != "" {
