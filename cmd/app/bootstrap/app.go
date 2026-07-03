@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/quoctann/content-hub/pkg/logger"
 	"github.com/quoctann/content-hub/pkg/middleware"
 	"github.com/quoctann/content-hub/pkg/server"
@@ -21,9 +22,9 @@ func NewApp() (*App, error) {
 	}
 
 	// Determine Gin mode based on environment
-	ginMode := "debug"
+	ginMode := gin.DebugMode
 	if deps.Config.Server.AppEnv == "prod" {
-		ginMode = "release"
+		ginMode = gin.ReleaseMode
 	}
 
 	srv := server.NewHTTPServer(
