@@ -12,15 +12,9 @@ import (
 	"github.com/quoctann/content-hub/pkg/server"
 )
 
-// SetupRouter registers all application routes and handlers.
-// It uses the framework‑agnostic server.Router interface.
 func SetupRouter(router server.Router, deps *Dependencies) {
-	// Setup generic routes (health, swagger, etc.)
-	// Note: We'll need to update httpDelivery to use server.Router
-	httpDelivery.RegisterRoutes(router)
-
-	// Setup health check endpoints
-	httpDelivery.RegisterHealthChecks(router, deps.DBPool)
+	httpDelivery.RegisterHealthChecks(router)
+	httpDelivery.RegisterK8SHealthChecks(router, deps.DBPool)
 
 	// Setup Content module
 	contentRepo := postgres.NewContentRepo(deps.DBPool)
@@ -28,11 +22,7 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 
 	// Setup Account module
 	accountRepo := postgres.NewAccountRepo(deps.DBPool)
-	jwtExpiry, _ := time.ParseDuration(deps.Config.Security.JWTExpiry)
-	if jwtExpiry == 0 {
-		jwtExpiry = 24 * time.Hour
-	}
-	accountUsecase := usecase.NewAccountUsecase(accountRepo, deps.Config.Security.JWTSecret, jwtExpiry)
+	accountUsecase := usecase.NewAccountUsecase(accountRepo, deps.Config.Security.JWTSecret, deps.Config.Security.JWTExpiry)
 
 	// Public routes (Login) — rate limited to 5 attempts per minute per IP
 	loginGroup := router.Group("/")
@@ -48,7 +38,7 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 	adminGroup := router.Group("/admin/contents")
 	adminGroup.Use(middleware.JWTAuth(middleware.JWTAuthConfig{
 		Secret: deps.Config.Security.JWTSecret,
-		Expiry: jwtExpiry, // Re-use the parsed jwtExpiry variable
+		Expiry: deps.Config.Security.JWTExpiry,
 		Issuer: "content-hub",
 	}))
 	adminGroup.Use(middleware.CSRFProtection())

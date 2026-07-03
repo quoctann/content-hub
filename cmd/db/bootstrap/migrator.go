@@ -8,11 +8,14 @@ import (
 	"github.com/quoctann/content-hub/internal/domain"
 )
 
-// InitMigrator initializes a domain.Migrator using the shared config.
-func InitMigrator(env, migrationsPath string) (domain.Migrator, error) {
-	cfg, err := shared.LoadConfig(env)
+func InitMigrator(migrationsPath string) (domain.Migrator, error) {
+	cfg, err := shared.LoadConfig()
 	if err != nil {
 		return nil, err
+	}
+
+	if migrationsPath == "" {
+		migrationsPath = cfg.Database.MigrationsPath
 	}
 
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
@@ -31,7 +34,6 @@ func InitMigrator(env, migrationsPath string) (domain.Migrator, error) {
 	return migrator.NewMigrator(dbURL, migrationsPath)
 }
 
-// InitMigrationCreator returns an implementation for creating migration files.
 func InitMigrationCreator() domain.MigrationCreator {
 	return migrator.NewMigrationCreator()
 }

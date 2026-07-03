@@ -9,22 +9,20 @@ import (
 	"github.com/quoctann/content-hub/pkg/server"
 )
 
-// App represents the fully initialized application.
 type App struct {
 	deps   *Dependencies
 	server server.Server
 }
 
-// NewApp creates and initializes a new application instance.
-func NewApp(env string) (*App, error) {
-	deps, err := InitDependencies(env)
+func NewApp() (*App, error) {
+	deps, err := InitDependencies()
 	if err != nil {
 		return nil, err
 	}
 
 	// Determine Gin mode based on environment
 	ginMode := "debug"
-	if env == "prod" {
+	if deps.Config.Server.AppEnv == "prod" {
 		ginMode = "release"
 	}
 
@@ -74,7 +72,7 @@ func NewApp(env string) (*App, error) {
 			app.deps.DBPool.Close()
 		}
 		if app.deps.Logger != nil {
-			app.deps.Logger.Sync()
+			_ = app.deps.Logger.Sync()
 		}
 		app.deps.Logger.InfoWithoutCtx("Server exited gracefully")
 		return nil
@@ -83,12 +81,10 @@ func NewApp(env string) (*App, error) {
 	return app, nil
 }
 
-// Start runs the application server.
 func (a *App) Start() error {
 	return a.server.Start()
 }
 
-// Stop gracefully shuts down the application.
 func (a *App) Stop(ctx context.Context) error {
 	return a.server.Stop(ctx)
 }

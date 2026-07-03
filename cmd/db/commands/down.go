@@ -12,7 +12,7 @@ var downCmd = &cobra.Command{
 	Use:   "down",
 	Short: "Run migrations down",
 	Run: func(cmd *cobra.Command, args []string) {
-		m, err := bootstrap.InitMigrator(env, migrationsPath)
+		m, err := bootstrap.InitMigrator(migrationsPath)
 		if err != nil {
 			log.Fatalf("Failed to initialize migrator: %v", err)
 		}

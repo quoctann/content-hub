@@ -13,9 +13,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// RegisterRoutes sets up all the routes for the application
-func RegisterRoutes(r server.Router) {
-	// Basic Health Check (deprecated, use /health/live instead)
+func RegisterHealthChecks(r server.Router) {
 	r.GET("/health", func(c server.Context) {
 		c.JSON(http.StatusOK, map[string]string{
 			"status": "ok",
@@ -25,31 +23,22 @@ func RegisterRoutes(r server.Router) {
 		c.Status(http.StatusOK)
 	})
 
-	// Leapcell health check
-	r.GET("/kaithheathcheck", func(c server.Context) {
-		c.JSON(http.StatusOK, map[string]string{
-			"status": "ok",
-		})
-	})
-
-	// Swagger
-	// Swagger — only available in non-production environments
+	// Swagger only available in non-production environments
 	if gr, ok := r.(*server.GinRouter); ok {
-		// In production, gin runs in ReleaseMode — skip swagger to avoid exposing API docs.
 		if gin.Mode() != gin.ReleaseMode {
 			gr.Engine().GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 		}
 	}
 }
 
-// RegisterHealthChecks sets up Kubernetes-compatible health check endpoints
+// RegisterK8SHealthChecks sets up Kubernetes-compatible health check endpoints
 // @Summary Liveness probe
 // @Description Returns 200 if the application is running
 // @Tags health
 // @Produce json
 // @Success 200 {object} map[string]string
 // @Router /health/live [get]
-func RegisterHealthChecks(r server.Router, dbPool *pgxpool.Pool) {
+func RegisterK8SHealthChecks(r server.Router, dbPool *pgxpool.Pool) {
 	health := r.Group("/health")
 	{
 		// Liveness probe - checks if the application is running

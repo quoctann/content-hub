@@ -1,177 +1,84 @@
 package config
 
 import (
-	"errors"
 	"fmt"
-	"os"
-	"strings"
+	"time"
 
-	"github.com/spf13/viper"
+	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
 )
 
+/*
+
+Local development: place a .env file next to the binary (or in the working
+directory). cmd/shared.LoadConfig calls godotenv.Load before parsing, so
+the .env file takes effect automatically.
+
+Production / Kubernetes: inject env vars directly (ConfigMap, Secret, etc.).
+No YAML files are needed.
+
+*/
+
 type Config struct {
-	Server   Server   `mapstructure:"server"`
-	Logger   Logger   `mapstructure:"logger"`
-	Database Database `mapstructure:"database"`
-	Security Security `mapstructure:"security"`
+	Server   Server
+	Logger   Logger
+	Database Database
+	Security Security
 }
 
 type Server struct {
-	Host   string `mapstructure:"host"`
-	Port   string `mapstructure:"port"`
-	AppEnv string `mapstructure:"app_env"`
+	Host   string `env:"SERVER_HOST"   envDefault:"0.0.0.0"`
+	Port   string `env:"SERVER_PORT"   envDefault:"8080"`
+	AppEnv string `env:"APP_ENV"       envDefault:"local"`
 }
 
 type Logger struct {
-	Level string `mapstructure:"level"`
+	Level string `env:"LOGGER_LEVEL" envDefault:"info"`
 }
 
 type Database struct {
-	Host           string `mapstructure:"host"`
-	Port           string `mapstructure:"port"`
-	User           string `mapstructure:"user"`
-	Password       string `mapstructure:"password"`
-	Name           string `mapstructure:"name"`
-	SSLMode        string `mapstructure:"ssl_mode"`
-	Schema         string `mapstructure:"schema"`
-	AutoMigrate    bool   `mapstructure:"auto_migrate"`
-	MigrationsPath string `mapstructure:"migrations_path"`
+	Host           string `env:"DATABASE_HOST"            envDefault:"localhost"`
+	Port           string `env:"DATABASE_PORT"            envDefault:"5432"`
+	User           string `env:"DATABASE_USER"            envDefault:"postgres"`
+	Password       string `env:"DATABASE_PASSWORD,required"`
+	Name           string `env:"DATABASE_NAME"            envDefault:"postgres"`
+	SSLMode        string `env:"DATABASE_SSL_MODE"        envDefault:"disable"`
+	Schema         string `env:"DATABASE_SCHEMA"`
+	AutoMigrate    bool   `env:"DATABASE_AUTO_MIGRATE"    envDefault:"false"`
+	MigrationsPath string `env:"DATABASE_MIGRATIONS_PATH" envDefault:"migrations"`
 }
 
 type Security struct {
-	APIKey         string `mapstructure:"api_key"`
-	AllowedOrigins string `mapstructure:"allow_origins"`
-	JWTSecret      string `mapstructure:"jwt_secret"`
-	JWTExpiry      string `mapstructure:"jwt_expiry"`
-	CSPDefaultSrc  string `mapstructure:"csp_default_src"`
-	CSPScriptSrc   string `mapstructure:"csp_script_src"`
-	CSPStyleSrc    string `mapstructure:"csp_style_src"`
-	CSPImgSrc      string `mapstructure:"csp_img_src"`
-	CSPFontSrc     string `mapstructure:"csp_font_src"`
-	CSPConnectSrc  string `mapstructure:"csp_connect_src"`
-	CSPFrameSrc    string `mapstructure:"csp_frame_src"`
-	CSPMediaSrc    string `mapstructure:"csp_media_src"`
-	CSPObjectSrc   string `mapstructure:"csp_object_src"`
+	APIKey string `env:"SECURITY_API_KEY"`
+
+	// AllowedOrigins is a comma-separated list parsed into a slice automatically.
+	// Example: SECURITY_ALLOW_ORIGINS=http://localhost:5173,http://localhost:3000
+	AllowedOrigins []string `env:"SECURITY_ALLOW_ORIGINS" envSeparator:","`
+
+	JWTSecret string        `env:"SECURITY_JWT_SECRET,required"`
+	JWTExpiry time.Duration `env:"SECURITY_JWT_EXPIRY" envDefault:"24h"`
+
+	// Content-Security-Policy directives. Leave empty to omit the header.
+	CSPDefaultSrc string `env:"SECURITY_CSP_DEFAULT_SRC"`
+	CSPScriptSrc  string `env:"SECURITY_CSP_SCRIPT_SRC"`
+	CSPStyleSrc   string `env:"SECURITY_CSP_STYLE_SRC"`
+	CSPImgSrc     string `env:"SECURITY_CSP_IMG_SRC"`
+	CSPFontSrc    string `env:"SECURITY_CSP_FONT_SRC"`
+	CSPConnectSrc string `env:"SECURITY_CSP_CONNECT_SRC"`
+	CSPFrameSrc   string `env:"SECURITY_CSP_FRAME_SRC"`
+	CSPMediaSrc   string `env:"SECURITY_CSP_MEDIA_SRC"`
+	CSPObjectSrc  string `env:"SECURITY_CSP_OBJECT_SRC"`
 }
 
-// isFileNotFoundError checks if the error indicates a file not found.
-func isFileNotFoundError(err error) bool {
-	var pathErr *os.PathError
-	if errors.As(err, &pathErr) {
-		return os.IsNotExist(pathErr)
+// Load parses all Config fields from the current environment variables.
+// For local development, call godotenv.Load(".env") before this function so
+// that the .env file populates the process environment first.
+func Load() (*Config, error) {
+	_ = godotenv.Load(".env")
+
+	cfg := &Config{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("config: %w", err)
 	}
-	_, ok := err.(viper.ConfigFileNotFoundError)
-	return ok
+	return cfg, nil
 }
-
-// GetAllowedOrigins returns a slice of allowed origins from comma-separated string
-func (s *Security) GetAllowedOrigins() []string {
-	if s.AllowedOrigins == "" {
-		return []string{}
-	}
-	var origins []string
-	for _, origin := range strings.Split(s.AllowedOrigins, ",") {
-		if trimmed := strings.TrimSpace(origin); trimmed != "" {
-			origins = append(origins, trimmed)
-		}
-	}
-	return origins
-}
-
-func LoadConfigWithEnv(env string) (*Config, error) {
-	v := viper.New()
-
-	// 1. Set default config type to yaml
-	v.SetConfigType("yaml")
-
-	// 2. Setup environment variables override
-	// Example: SERVER_PORT, DATABASE_PASSWORD (instead of DATABASE.PASSWORD)
-	v.AutomaticEnv()
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-
-	if err := bindEnv(v); err != nil {
-		return nil, fmt.Errorf("failed to bind env vars: %w", err)
-	}
-
-	// 3. Load configurations in order (cascading)
-
-	// First: General config file (base defaults)
-	v.SetConfigFile("config.yaml")
-	if err := v.MergeInConfig(); err != nil {
-		if !isFileNotFoundError(err) {
-			return nil, fmt.Errorf("error reading general config file: %w", err)
-		}
-		// If config.yaml is missing, we might still proceed if env-specific file exists
-	}
-
-	// Second: Environment-specific config (e.g., config-dev.yaml)
-	if env != "" {
-		envConfigFile := fmt.Sprintf("config-%s.yaml", env)
-		v.SetConfigFile(envConfigFile)
-		if err := v.MergeInConfig(); err != nil {
-			if !isFileNotFoundError(err) {
-				return nil, fmt.Errorf("error reading %s config file: %w", envConfigFile, err)
-			}
-			// If env-specific file is missing, it's okay as long as base config or env vars exist
-			return nil, err
-		}
-	}
-
-	var cfg Config
-	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("unable to decode into struct: %w", err)
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
-
-	return &cfg, nil
-}
-
-// Validate performs security checks on the loaded configuration.
-func (c *Config) Validate() error {
-	if c.Security.JWTSecret == "" {
-		return errors.New("security: SECURITY_JWT_SECRET is not configured or uses the default placeholder; refusing to start")
-	}
-
-	return nil
-}
-
-func bindEnv(v *viper.Viper) error {
-		envs := map[string]string{
-			"server.port":              "SERVER_PORT",
-			"app_env":                  "APP_ENV",
-			"logger.level":             "LOGGER_LEVEL",
-			"database.host":            "DATABASE_HOST",
-			"database.port":            "DATABASE_PORT",
-			"database.user":            "DATABASE_USER",
-			"database.password":        "DATABASE_PASSWORD",
-			"database.name":            "DATABASE_NAME",
-			"database.ssl_mode":        "DATABASE_SSL_MODE",
-			"database.schema":          "DATABASE_SCHEMA",
-			"database.auto_migrate":    "DATABASE_AUTO_MIGRATE",
-			"database.migrations_path": "DATABASE_MIGRATIONS_PATH",
-			"security.allow_origins":   "SECURITY_ALLOW_ORIGINS",
-			"security.jwt_secret":      "SECURITY_JWT_SECRET",
-			"security.jwt_expiry":      "SECURITY_JWT_EXPIRY",
-			"security.csp_default_src": "SECURITY_CSP_DEFAULT_SRC",
-			"security.csp_script_src":  "SECURITY_CSP_SCRIPT_SRC",
-			"security.csp_style_src":   "SECURITY_CSP_STYLE_SRC",
-			"security.csp_img_src":     "SECURITY_CSP_IMG_SRC",
-			"security.csp_font_src":    "SECURITY_CSP_FONT_SRC",
-			"security.csp_connect_src": "SECURITY_CSP_CONNECT_SRC",
-			"security.csp_frame_src":   "SECURITY_CSP_FRAME_SRC",
-			"security.csp_media_src":   "SECURITY_CSP_MEDIA_SRC",
-			"security.csp_object_src":  "SECURITY_CSP_OBJECT_SRC",
-		}
-	
-		for key, env := range envs {
-			if err := v.BindEnv(key, env); err != nil {
-				return err
-			}
-		}
-	
-		return nil
-	}

@@ -10,22 +10,19 @@ import (
 	"github.com/quoctann/content-hub/pkg/logger"
 )
 
-// Dependencies holds all initialized application dependencies.
 type Dependencies struct {
 	Logger logger.ILogger
 	Config *config.Config
 	DBPool *pgxpool.Pool
 }
 
-// InitDependencies initializes all application dependencies.
-// It uses shared initialization logic and follows the fail‑fast principle.
-func InitDependencies(env string) (*Dependencies, error) {
-	l, err := shared.InitLogger(env)
+func InitDependencies() (*Dependencies, error) {
+	cfg, err := shared.LoadConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	cfg, err := shared.LoadConfig(env)
+	l, err := shared.InitLogger(cfg.Server.AppEnv, cfg.Logger.Level)
 	if err != nil {
 		return nil, err
 	}

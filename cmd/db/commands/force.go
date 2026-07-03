@@ -22,7 +22,7 @@ var forceCmd = &cobra.Command{
 			log.Fatalf("Invalid version: %v", err)
 		}
 
-		m, err := bootstrap.InitMigrator(env, migrationsPath)
+		m, err := bootstrap.InitMigrator(migrationsPath)
 		if err != nil {
 			log.Fatalf("Failed to initialize migrator: %v", err)
 		}

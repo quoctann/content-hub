@@ -6,9 +6,8 @@ import (
 	"github.com/quoctann/content-hub/pkg/logger"
 )
 
-// InitLogger initializes the application logger.
-func InitLogger(env string) (logger.ILogger, error) {
-	l, err := logger.NewZapLogger(env)
+func InitLogger(appEnv, level string) (logger.ILogger, error) {
+	l, err := logger.NewZapLogger(appEnv, level)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}

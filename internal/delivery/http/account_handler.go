@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/quoctann/content-hub/internal/domain"
 	"github.com/quoctann/content-hub/pkg/config"
@@ -72,14 +71,9 @@ func (h *AccountHandler) Login(c server.Context) {
 		return
 	}
 
-	expiry, err := time.ParseDuration(h.Config.Security.JWTExpiry)
-	if err != nil {
-		expiry = 24 * time.Hour
-	}
-
 	token, err := middleware.GenerateToken(
 		h.Config.Security.JWTSecret,
-		expiry,
+		h.Config.Security.JWTExpiry,
 		"content-hub",
 		account.Role,
 		"access",
@@ -91,6 +85,7 @@ func (h *AccountHandler) Login(c server.Context) {
 		return
 	}
 
+	expiry := h.Config.Security.JWTExpiry
 	refreshToken, err := middleware.GenerateToken(
 		h.Config.Security.JWTSecret,
 		expiry*7,
@@ -152,16 +147,11 @@ func (h *AccountHandler) Refresh(c server.Context) {
 		return
 	}
 
-	expiry, err := time.ParseDuration(h.Config.Security.JWTExpiry)
-	if err != nil {
-		expiry = 24 * time.Hour
-	}
-
 	userID, _ := strconv.ParseInt(claims.Subject, 10, 64)
 
 	token, err := middleware.GenerateToken(
 		h.Config.Security.JWTSecret,
-		expiry,
+		h.Config.Security.JWTExpiry,
 		"content-hub",
 		claims.Role,
 		"access",
@@ -182,6 +172,7 @@ func (h *AccountHandler) Refresh(c server.Context) {
 
 	isSecure := h.Config.Server.AppEnv != "local"
 
+	expiry := h.Config.Security.JWTExpiry
 	c.SetCookie("access_token", token, int(expiry.Seconds()), "/", isSecure, true)
 	c.SetCookie("csrf_token", csrfToken, int(expiry.Seconds()), "/", isSecure, false)
 

@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// env is kept as an optional override for APP_ENV. Setting it via flag
+// is equivalent to exporting APP_ENV=<value> in the shell before running.
 var env string
 
 // rootCmd represents the base command when called without any subcommands
@@ -29,10 +31,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&env, "env", "e", "", "environment (local|dev|prod)")
-	if env == "" {
-		env = os.Getenv("APP_ENV")
-	}
+	rootCmd.PersistentFlags().StringVarP(&env, "env", "e", "", "override APP_ENV (local|dev|prod)")
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -44,8 +43,12 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}()
 
-	// Initialize and start the application
-	app, err := bootstrap.NewApp(env)
+	// --env flag overrides APP_ENV env var so config.Load picks it up.
+	if env != "" {
+		os.Setenv("APP_ENV", env)
+	}
+
+	app, err := bootstrap.NewApp()
 	if err != nil {
 		fmt.Printf("Failed to initialize application: %v\n", err)
 		os.Exit(1)

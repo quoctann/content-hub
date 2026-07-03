@@ -7,7 +7,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// IContextLogger interface for context-aware logging
 type IContextLogger interface {
 	Debug(ctx context.Context, msg string, fields ...Field)
 	Info(ctx context.Context, msg string, fields ...Field)
@@ -16,7 +15,6 @@ type IContextLogger interface {
 	Fatal(ctx context.Context, msg string, fields ...Field)
 }
 
-// IWithoutContextLogger interface for non-context logging
 type IWithoutContextLogger interface {
 	DebugWithoutCtx(msg string, fields ...Field)
 	InfoWithoutCtx(msg string, fields ...Field)
@@ -25,7 +23,6 @@ type IWithoutContextLogger interface {
 	FatalWithoutCtx(msg string, fields ...Field)
 }
 
-// ILogger combines both context-aware and non-context logging interfaces.
 type ILogger interface {
 	IContextLogger
 	IWithoutContextLogger
@@ -59,18 +56,24 @@ type zapLogger struct {
 	zap *zap.Logger
 }
 
-// NewZapLogger creates a new context-aware logger using Zap.
-func NewZapLogger(env string) (ILogger, error) {
-	var config zap.Config
-	if env == "local" {
-		config = zap.NewDevelopmentConfig()
-		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+func NewZapLogger(appEnv, level string) (ILogger, error) {
+	var cfg zap.Config
+	if appEnv == "local" {
+		cfg = zap.NewDevelopmentConfig()
+		cfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	} else {
-		config = zap.NewProductionConfig()
+		cfg = zap.NewProductionConfig()
 	}
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
-	l, err := config.Build(zap.AddCallerSkip(1))
+	if level != "" {
+		var zapLevel zapcore.Level
+		if err := zapLevel.UnmarshalText([]byte(level)); err == nil {
+			cfg.Level = zap.NewAtomicLevelAt(zapLevel)
+		}
+	}
+
+	l, err := cfg.Build(zap.AddCallerSkip(1))
 	if err != nil {
 		return nil, err
 	}
