@@ -30,12 +30,27 @@ type Content struct {
 
 // SearchFilter holds optional filters for the Search operation.
 type SearchFilter struct {
-	Query            string
-	Keywords         []string
-	MatchType        string // "and" or "or", default "or"
-	ContentType      ContentType
-	IncludeHidden    bool   // Include hidden content in results
-	VisibilityFilter string // "visible", "hidden", or "" (all) — only meaningful when IncludeHidden is true
+	// Keywords is the preferred multi-term list. Each entry is an independent token;
+	// MatchType controls whether all must appear (AND) or any suffices (OR).
+	Keywords []string
+
+	// MatchType is "and" or "or" (default "or"). Only meaningful when len(Keywords) > 1.
+	MatchType string
+
+	// ContentType restricts results to a specific media type ("text" or "image").
+	// Empty means no restriction.
+	ContentType ContentType
+
+	// IncludeHidden controls whether hidden items can appear in results.
+	//   false → hidden items are always excluded (public API default).
+	//   true  → VisibilityFilter further refines which subset is returned (admin API).
+	IncludeHidden bool
+
+	// VisibilityFilter is only meaningful when IncludeHidden is true.
+	//   "true"  → visible items only  (is_hidden = false)
+	//   "false" → hidden items only   (is_hidden = true)
+	//   ""      → no visibility restriction (all items)
+	VisibilityFilter string
 }
 
 // PaginationMeta holds pagination metadata for paginated responses

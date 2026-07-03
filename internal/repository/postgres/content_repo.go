@@ -120,118 +120,145 @@ func (r *contentRepo) SetHidden(ctx context.Context, id int64, hidden bool) erro
 	return nil
 }
 
-func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cursor string, num int64) ([]domain.Content, int64, error) {
-	var offset int
-	if cursor != "" {
-		fmt.Sscanf(cursor, "%d", &offset)
+// tsQuery holds the resolved tsquery function name and its single argument,
+// ready to be embedded as tsFunc('simple', unaccent($1)) in SQL.
+type tsQuery struct {
+	fn  string // "plainto_tsquery" or "to_tsquery"
+	arg string // the query string to pass as $1
+}
+
+// buildTSQuery resolves the correct PostgreSQL tsquery variant from the filter.
+//
+//   - No keywords: zero value (no FTS condition added)
+//   - Single keyword: plainto_tsquery (handles tokenisation automatically)
+//   - Multiple keywords: to_tsquery with explicit & / | operators
+//
+// Single-quote escaping is applied only for the multi-keyword to_tsquery path,
+// which needs the operator syntax, plainto_tsquery never needs it.
+func buildTSQuery(filter domain.SearchFilter) (tsQuery, bool) {
+	keywords := filter.Keywords
+
+	// Normalize: strip blank entries produced by trailing commas or extra spaces.
+	cleaned := keywords[:0]
+	for _, kw := range keywords {
+		if trimmed := strings.TrimSpace(kw); trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
 	}
-	if offset < 0 {
-		offset = 0
+	keywords = cleaned
+
+	switch {
+	case len(keywords) == 0:
+		return tsQuery{}, false // no FTS - browse / list mode
+
+	case len(keywords) == 1:
+		// Single keyword; plainto_tsquery is simpler and handles all edge cases.
+		return tsQuery{fn: "plainto_tsquery", arg: keywords[0]}, true
+
+	default:
+		// Multiple keywords: build an explicit operator expression for to_tsquery.
+		op := " | "
+		if filter.MatchType == "and" {
+			op = " & "
+		}
+		// Escape single quotes so they are valid inside a to_tsquery string literal.
+		escaped := make([]string, len(keywords))
+		for i, kw := range keywords {
+			escaped[i] = strings.ReplaceAll(kw, "'", "''")
+		}
+		return tsQuery{fn: "to_tsquery", arg: strings.Join(escaped, op)}, true
 	}
+}
 
-	limit := num
-	if limit <= 0 {
-		limit = 10 // Default limit
-	}
-
-	// Determine if we have a search query (from Keywords or legacy Query)
-	hasSearchQuery := len(filter.Keywords) > 0 || filter.Query != ""
-
-	// Build args slice and track parameter index
-	var args []interface{}
-	var tsqueryFunc string
-	argID := 1 // Will be incremented as we add parameters
-
-	if len(filter.Keywords) > 0 {
-		searchArgs, funcName := r.buildSearchArgs(filter.Keywords, filter.MatchType)
-		args = searchArgs
-		tsqueryFunc = funcName
-		argID = len(args) + 1 // Move to next available param slot
-	} else if filter.Query != "" {
-		args = []interface{}{filter.Query}
-		tsqueryFunc = "plainto_tsquery"
-		argID = 2 // Next slot after $1
-	}
-
-	// Build SELECT clause with ts_rank always included (0 if no search query)
-	selectClause := "DISTINCT c.id, c.title, c.text_data, c.ocr_text, c.caption, c.link, c.type, c.is_hidden, c.created_at, c.updated_at"
-	if hasSearchQuery {
-		selectClause += fmt.Sprintf(", ts_rank(search_vector, %s('simple', public.unaccent($1))) as rank", tsqueryFunc)
-	} else {
-		selectClause += ", 0.0 as rank"
-	}
-
-	baseQuery := fmt.Sprintf(`
-		SELECT %s
-		FROM content c
-	`, selectClause)
-
-	var conditions []string
-	conditions = append(conditions, "c.deleted_at IS NULL")
-
-	// Visibility filter logic:
-	// - IncludeHidden false (public API): always exclude hidden
-	// - IncludeHidden true + VisibilityFilter "true": only visible (is_hidden = false)
-	// - IncludeHidden true + VisibilityFilter "false": only hidden (is_hidden = true)
-	// - IncludeHidden true + VisibilityFilter "": include all (no condition)
+// visibilityCondition returns the SQL fragment (if any) that enforces the
+// requested visibility policy.
+//
+// Public API (IncludeHidden=false): always exclude hidden rows
+//
+// Admin API (IncludeHidden=true): respect VisibilityFilter:
+//
+//	"true": visible only
+//	"false": hidden only
+//	"": no restriction
+func visibilityCondition(filter domain.SearchFilter) string {
 	if !filter.IncludeHidden {
-		conditions = append(conditions, "c.is_hidden = false")
-	} else if filter.VisibilityFilter == "true" {
-		conditions = append(conditions, "c.is_hidden = false")
-	} else if filter.VisibilityFilter == "false" {
-		conditions = append(conditions, "c.is_hidden = true")
+		return "c.is_hidden = false"
+	}
+	switch filter.VisibilityFilter {
+	case "true":
+		return "c.is_hidden = false"
+	case "false":
+		return "c.is_hidden = true"
+	default:
+		return ""
+	}
+}
+
+func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cursor string, num int64) ([]domain.Content, int64, error) {
+	offset := parseCursor(cursor)
+	if num <= 0 {
+		num = 10
 	}
 
-	// Build search condition from Keywords (preferred) or legacy Query
-	if len(filter.Keywords) > 0 {
-		conditions = append(conditions, fmt.Sprintf("search_vector @@ %s('simple', public.unaccent($1))", tsqueryFunc))
-	} else if filter.Query != "" {
-		conditions = append(conditions, "search_vector @@ plainto_tsquery('simple', public.unaccent($1))")
-	}
+	tsq, hasFTS := buildTSQuery(filter)
 
+	// args holds positional query parameters ($1, $2, …).
+	// When FTS is active, $1 is always the tsquery argument so the SELECT and
+	// WHERE clauses can reference it with a fixed placeholder.
+	var args []any
+	if hasFTS {
+		args = append(args, tsq.arg) // $1
+	}
+	nextArg := len(args) + 1 // next available $N slot
+
+	const baseColumns = "DISTINCT c.id, c.title, c.text_data, c.ocr_text, c.caption, c.link, c.type, c.is_hidden, c.created_at, c.updated_at"
+	rankExpr := "0.0"
+	if hasFTS {
+		rankExpr = fmt.Sprintf("ts_rank(search_vector, %s('simple', public.unaccent($1)))", tsq.fn)
+	}
+	selectSQL := fmt.Sprintf("SELECT %s, %s AS rank FROM content c", baseColumns, rankExpr)
+
+	conditions := []string{"c.deleted_at IS NULL"}
+
+	if vis := visibilityCondition(filter); vis != "" {
+		conditions = append(conditions, vis)
+	}
+	if hasFTS {
+		conditions = append(conditions, fmt.Sprintf("search_vector @@ %s('simple', public.unaccent($1))", tsq.fn))
+	}
 	if filter.ContentType != "" {
-		conditions = append(conditions, fmt.Sprintf("c.type = $%d", argID))
+		conditions = append(conditions, fmt.Sprintf("c.type = $%d", nextArg))
 		args = append(args, string(filter.ContentType))
-		argID++
+		nextArg++
 	}
 
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = " WHERE " + strings.Join(conditions, " AND ")
+	whereSQL := " WHERE " + strings.Join(conditions, " AND ")
+
+	orderSQL := " ORDER BY c.created_at DESC"
+	if hasFTS {
+		orderSQL = " ORDER BY rank DESC, c.created_at DESC"
 	}
 
-	// Order by rank DESC if query is present, then by created_at
-	orderClause := " ORDER BY c.created_at DESC"
-	if hasSearchQuery {
-		orderClause = " ORDER BY rank DESC, c.created_at DESC"
-	}
-
-	// First, get total count
-	countQuery := fmt.Sprintf("SELECT COUNT(DISTINCT c.id) FROM content c%s", whereClause)
-	countArgs := args[:] // Use same args (without limit/offset)
+	countSQL := "SELECT COUNT(DISTINCT c.id) FROM content c" + whereSQL
 	var totalCount int64
-	err := r.db.QueryRow(ctx, countQuery, countArgs...).Scan(&totalCount)
-	if err != nil {
+	if err := r.db.QueryRow(ctx, countSQL, args...).Scan(&totalCount); err != nil {
 		return nil, 0, fmt.Errorf("failed to count results: %w", err)
 	}
 
-	// Then, get paginated results
-	resultQuery := baseQuery + whereClause + orderClause + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argID, argID+1)
-	resultArgs := append(args, limit, offset)
+	dataSQL := selectSQL + whereSQL + orderSQL + fmt.Sprintf(" LIMIT $%d OFFSET $%d", nextArg, nextArg+1)
+	dataArgs := append(args, num, offset)
 
-	rows, err := r.db.Query(ctx, resultQuery, resultArgs...)
+	rows, err := r.db.Query(ctx, dataSQL, dataArgs...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("query failed: %w", err)
+		return nil, 0, fmt.Errorf("search query failed: %w", err)
 	}
 	defer rows.Close()
 
 	var contents []domain.Content
-
 	for rows.Next() {
 		var c domain.Content
 		var rank float64
-		err := rows.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.IsHidden, &c.CreatedAt, &c.UpdatedAt, &rank)
-		if err != nil {
+		if err := rows.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.IsHidden, &c.CreatedAt, &c.UpdatedAt, &rank); err != nil {
 			return nil, 0, fmt.Errorf("scan failed: %w", err)
 		}
 		c.Rank = rank
@@ -241,42 +268,16 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 	return contents, totalCount, nil
 }
 
-func (r *contentRepo) buildSearchArgs(keywords []string, matchType string) ([]interface{}, string) {
-	// Default to OR if not specified
-	if matchType == "" {
-		matchType = "or"
+// parseCursor decodes a cursor string (a stringified integer offset) into an
+// int64. An empty or invalid cursor returns 0.
+func parseCursor(cursor string) int64 {
+	if cursor == "" {
+		return 0
 	}
-
-	// Filter out empty keywords
-	var validKeywords []string
-	for _, kw := range keywords {
-		kw = strings.TrimSpace(kw)
-		if kw != "" {
-			validKeywords = append(validKeywords, kw)
-		}
+	var offset int64
+	_, _ = fmt.Sscanf(cursor, "%d", &offset)
+	if offset < 0 {
+		return 0
 	}
-
-	if len(validKeywords) == 0 {
-		return nil, "plainto_tsquery"
-	}
-
-	if len(validKeywords) == 1 {
-		return []interface{}{validKeywords[0]}, "plainto_tsquery"
-	}
-
-	// Multiple keywords: build combined query string for to_tsquery
-	separator := " & " // AND
-	if matchType == "or" {
-		separator = " | "
-	}
-
-	// Escape single quotes in keywords for to_tsquery
-	var escapedKeywords []string
-	for _, kw := range validKeywords {
-		escaped := strings.ReplaceAll(kw, "'", "''")
-		escapedKeywords = append(escapedKeywords, escaped)
-	}
-	queryStr := strings.Join(escapedKeywords, separator)
-
-	return []interface{}{queryStr}, "to_tsquery"
+	return offset
 }

@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"os"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -57,26 +58,37 @@ type zapLogger struct {
 }
 
 func NewZapLogger(appEnv, level string) (ILogger, error) {
-	var cfg zap.Config
-	if appEnv == "local" {
-		cfg = zap.NewDevelopmentConfig()
-		cfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	} else {
-		cfg = zap.NewProductionConfig()
-	}
-	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg := zap.NewProductionEncoderConfig()
+	encoderCfg.TimeKey = "timestamp"
+	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.EncodeLevel = zapcore.LowercaseLevelEncoder
 
+	zapLevel := zapcore.InfoLevel
 	if level != "" {
-		var zapLevel zapcore.Level
-		if err := zapLevel.UnmarshalText([]byte(level)); err == nil {
-			cfg.Level = zap.NewAtomicLevelAt(zapLevel)
-		}
+		_ = zapLevel.UnmarshalText([]byte(level))
+	}
+	levelEnabler := zap.NewAtomicLevelAt(zapLevel)
+
+	stdout := zapcore.Lock(os.Stdout)
+	stderr := zapcore.Lock(os.Stderr)
+	encoder := zapcore.NewJSONEncoder(encoderCfg)
+	core := zapcore.NewTee(
+		zapcore.NewCore(encoder, stdout, zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return levelEnabler.Enabled(lvl) && lvl < zapcore.ErrorLevel
+		})),
+		zapcore.NewCore(encoder, stderr, zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return levelEnabler.Enabled(lvl) && lvl >= zapcore.ErrorLevel
+		})),
+	)
+
+	options := []zap.Option{zap.AddCaller(), zap.AddCallerSkip(1)}
+	if appEnv == "local" {
+		options = append(options, zap.Development())
+	} else {
+		options = append(options, zap.AddStacktrace(zapcore.ErrorLevel))
 	}
 
-	l, err := cfg.Build(zap.AddCallerSkip(1))
-	if err != nil {
-		return nil, err
-	}
+	l := zap.New(core, options...)
 
 	return &zapLogger{zap: l}, nil
 }
@@ -84,20 +96,24 @@ func NewZapLogger(appEnv, level string) (ILogger, error) {
 // Convert logger.Field to zap.Field
 func (l *zapLogger) toZapFields(fields ...Field) []zap.Field {
 	zapFields := make([]zap.Field, len(fields))
-	for i, f := range fields {
-		switch f.Type {
+	for i, field := range fields {
+		switch field.Type {
 		case FieldTypeString:
-			zapFields[i] = zap.String(f.Key, f.StringVal)
+			zapFields[i] = zap.String(field.Key, field.StringVal)
 		case FieldTypeInt64:
-			zapFields[i] = zap.Int64(f.Key, f.Int64Val)
+			zapFields[i] = zap.Int64(field.Key, field.Int64Val)
 		case FieldTypeBool:
-			zapFields[i] = zap.Bool(f.Key, f.Int64Val == 1)
+			zapFields[i] = zap.Bool(field.Key, field.Int64Val == 1)
 		case FieldTypeError:
-			zapFields[i] = zap.Error(f.Interface.(error))
+			if err, ok := field.Interface.(error); ok && err != nil {
+				zapFields[i] = zap.Error(err)
+			} else {
+				zapFields[i] = zap.Skip()
+			}
 		case FieldTypeAny:
-			zapFields[i] = zap.Any(f.Key, f.Interface)
+			zapFields[i] = zap.Any(field.Key, field.Interface)
 		default:
-			zapFields[i] = zap.Any(f.Key, f.Interface)
+			zapFields[i] = zap.Any(field.Key, field.Interface)
 		}
 	}
 	return zapFields

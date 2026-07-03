@@ -2,13 +2,17 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/quoctann/content-hub/pkg/logger"
 )
 
 // HTTPConfig defines the configuration for the HTTP server
@@ -40,12 +44,13 @@ func NewHTTPServer(opts ...HTTPOption) *HTTPServer {
 			WriteTimeout:    10 * time.Second,
 			ShutdownTimeout: 10 * time.Second,
 		},
-		engine: gin.Default(),
 	}
 
 	for _, opt := range opts {
 		opt(s)
 	}
+
+	s.engine = newGinEngine()
 
 	s.httpServer = &http.Server{
 		Addr:           s.config.Addr,
@@ -56,6 +61,89 @@ func NewHTTPServer(opts ...HTTPOption) *HTTPServer {
 	}
 
 	return s
+}
+
+func newGinEngine() *gin.Engine {
+	engine := gin.New()
+	engine.Use(ginJSONLogger(), ginJSONRecovery())
+	return engine
+}
+
+func ginJSONLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+
+		entry := map[string]interface{}{
+			"timestamp":  time.Now().Format(time.RFC3339Nano),
+			"level":      "info",
+			"service":    "content-hub",
+			"env":        os.Getenv("APP_ENV"),
+			"msg":        "http_request",
+			"status":     c.Writer.Status(),
+			"latency_ms": float64(time.Since(start).Microseconds()) / 1000,
+			"client_ip":  c.ClientIP(),
+			"method":     c.Request.Method,
+			"path":       c.Request.URL.Path,
+			"user_agent": c.Request.UserAgent(),
+			"body_size":  c.Writer.Size(),
+		}
+
+		if requestID := traceValue(c, "X-Request-ID", logger.RequestIDKey); requestID != "" {
+			entry["request_id"] = requestID
+		}
+		if traceID := traceValue(c, "X-Trace-ID", logger.TraceIDKey); traceID != "" {
+			entry["trace_id"] = traceID
+		}
+		if spanID := traceValue(c, "X-Span-ID", logger.SpanIDKey); spanID != "" {
+			entry["span_id"] = spanID
+		}
+		if errs := c.Errors.String(); errs != "" {
+			entry["error"] = errs
+		}
+		if c.Writer.Status() >= http.StatusInternalServerError {
+			entry["level"] = "error"
+			writeJSONLog(os.Stderr, entry)
+			return
+		}
+
+		writeJSONLog(os.Stdout, entry)
+	}
+}
+
+func ginJSONRecovery() gin.HandlerFunc {
+	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+		writeJSONLog(os.Stderr, map[string]interface{}{
+			"timestamp":  time.Now().Format(time.RFC3339Nano),
+			"level":      "error",
+			"msg":        "panic_recovered",
+			"error":      fmt.Sprint(recovered),
+			"method":     c.Request.Method,
+			"path":       c.Request.URL.Path,
+			"stacktrace": string(debug.Stack()),
+		})
+		c.AbortWithStatus(http.StatusInternalServerError)
+	})
+}
+
+func writeJSONLog(file *os.File, entry map[string]interface{}) {
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	_, _ = file.Write(append(encoded, '\n'))
+}
+
+func traceValue(c *gin.Context, headerName, contextKey string) string {
+	if value := c.GetHeader(headerName); value != "" {
+		return value
+	}
+	if value, ok := c.Get(contextKey); ok {
+		if valueString, ok := value.(string); ok {
+			return valueString
+		}
+	}
+	return ""
 }
 
 // WithGinMode sets the Gin mode (debug or release)

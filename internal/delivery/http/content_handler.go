@@ -46,15 +46,48 @@ var validContentTypes = map[domain.ContentType]bool{
 	domain.Image: true,
 }
 
+func parseKeywords(kw string) []string {
+	if kw == "" {
+		return nil
+	}
+
+	parts := strings.Split(kw, ",")
+	out := parts[:0] // same underlying array, but zero length, filtering-in-place
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+func parseContentType(typeStr string) (domain.ContentType, string) {
+	ct := domain.ContentType(typeStr)
+	if !validContentTypes[ct] {
+		return "", "invalid type: must be 'image' or 'text'"
+	}
+	return ct, ""
+}
+
+// clampPageSize ensures pageSize is between 1 and max (inclusive).
+func clampPageSize(pageSize, max int64) int64 {
+	if pageSize < 1 {
+		return 1
+	}
+	if pageSize > max {
+		return max
+	}
+	return pageSize
+}
+
 // Search godoc
 // @Summary      Search contents
-// @Description  Search contents by keywords, query text, type, and tags
+// @Description  Search contents by keywords and type
 // @Tags         contents
 // @Accept       json
 // @Produce      json
 // @Param        keywords   query     string  false  "Comma-separated keywords: hello,world"
 // @Param        match_type query     string  false  "Match type: and (all must match) or or (any match), default or"
-// @Param        q          query     string  false  "Search query (deprecated, use keywords)"
 // @Param        type       query     string  false  "Content type filter (image, text)"
 // @Param        num        query     int     false  "Number of results"
 // @Param        cursor     query     string  false  "Cursor for pagination"
@@ -64,37 +97,23 @@ var validContentTypes = map[domain.ContentType]bool{
 // @Security     ApiKeyAuth
 // @Router       /contents [get]
 func (h *ContentHandler) Search(c server.Context) {
-	numS := c.Query("num")
-	num, _ := strconv.ParseInt(numS, 10, 64)
+	num, _ := strconv.ParseInt(c.Query("num"), 10, 64)
 	cursor := c.Query("cursor")
 
-	// Build search filter
 	filter := domain.SearchFilter{}
 
-	// Parse keywords (preferred) or fallback to legacy q
-	keywordsStr := c.Query("keywords")
-	if keywordsStr != "" {
-		parts := strings.Split(keywordsStr, ",")
-		for _, p := range parts {
-			if trimmed := strings.TrimSpace(p); trimmed != "" {
-				filter.Keywords = append(filter.Keywords, trimmed)
-			}
-		}
-		// Default to "or" if match_type not provided
+	if keywords := parseKeywords(c.Query("keywords")); keywords != nil {
+		filter.Keywords = keywords
 		filter.MatchType = c.Query("match_type")
 		if filter.MatchType == "" {
 			filter.MatchType = "or"
 		}
-	} else {
-		// Legacy: fallback to q query
-		filter.Query = c.Query("q")
 	}
 
-	// Validate and set content type filter
 	if typeStr := c.Query("type"); typeStr != "" {
-		ct := domain.ContentType(typeStr)
-		if !validContentTypes[ct] {
-			c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid type: must be 'image' or 'text'"})
+		ct, errMsg := parseContentType(typeStr)
+		if errMsg != "" {
+			c.JSON(http.StatusBadRequest, map[string]string{"error": errMsg})
 			return
 		}
 		filter.ContentType = ct
@@ -220,7 +239,7 @@ func (h *ContentHandler) Update(c server.Context) {
 // @Produce    json
 // @Param       page      query  int     false  "Page number (1-based)"
 // @Param       page_size query  int     false  "Items per page (default 20, max 100)"
-// @Param       q         query  string  false  "Search keyword"
+// @Param       keywords  query  string  false  "Comma-separated keywords: hello,world"
 // @Param       type      query  string  false  "Content type filter (image, text)"
 // @Param       visible   query  string  false  "Visibility filter: true (visible only), false (hidden only), or empty (all)"
 // @Success    200      {object}  AdminContentResponseWrapper
@@ -235,36 +254,33 @@ func (h *ContentHandler) AdminList(ctx server.Context) {
 
 	pageSize, _ := strconv.ParseInt(ctx.Query("page_size"), 10, 64)
 	if pageSize < 1 {
-		pageSize = 20
+		pageSize = 20 // default
 	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
-
-	offset := (page - 1) * pageSize
+	pageSize = clampPageSize(pageSize, 100)
 
 	filter := domain.SearchFilter{IncludeHidden: true}
-
-	// Optional keyword search
-	if q := ctx.Query("q"); q != "" {
-		filter.Query = q
+	if keywords := parseKeywords(ctx.Query("keywords")); keywords != nil {
+		filter.Keywords = keywords
+		filter.MatchType = ctx.Query("match_type")
+		if filter.MatchType == "" {
+			filter.MatchType = "or"
+		}
 	}
 
-	// Optional type filter
 	if typeStr := ctx.Query("type"); typeStr != "" {
-		ct := domain.ContentType(typeStr)
-		if !validContentTypes[ct] {
-			ctx.JSON(http.StatusBadRequest, map[string]string{"error": "invalid type: must be 'image' or 'text'"})
+		ct, errMsg := parseContentType(typeStr)
+		if errMsg != "" {
+			ctx.JSON(http.StatusBadRequest, map[string]string{"error": errMsg})
 			return
 		}
 		filter.ContentType = ct
 	}
 
-	// Optional visibility filter: "true" = visible only, "false" = hidden only, "" = all
 	if vis := ctx.Query("visible"); vis == "true" || vis == "false" {
 		filter.VisibilityFilter = vis
 	}
 
+	offset := (page - 1) * pageSize
 	cursor := strconv.FormatInt(offset, 10)
 
 	result, err := h.CUsecase.Search(ctx.Request().Context(), filter, cursor, pageSize)
