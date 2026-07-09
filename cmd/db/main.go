@@ -5,7 +5,5 @@ import (
 )
 
 func main() {
-	// The database CLI logic is encapsulated in the commands and bootstrap packages.
-	// We simply delegate execution to the commands package.
 	commands.Execute()
 }

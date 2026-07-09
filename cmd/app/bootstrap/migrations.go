@@ -31,9 +31,7 @@ func RunMigrations(deps *Dependencies) error {
 		migrationsPath = "migrations"
 	}
 
-	// Migrator now handles the "file://" prefix logic internally,
-	// so we just pass the path as is.
-
+	// Migrator handles the "file://" prefix logic internally
 	m, err := migrator.NewMigrator(dbURL, migrationsPath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize migrator: %w", err)

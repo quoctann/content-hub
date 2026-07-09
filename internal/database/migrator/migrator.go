@@ -15,7 +15,6 @@ type GolangMigrateAdapter struct {
 	m *migrate.Migrate
 }
 
-// NewGolangMigrateAdapter creates a new adapter instance.
 func NewGolangMigrateAdapter(databaseURL string, migrationsPath string) (*GolangMigrateAdapter, error) {
 	sourceURL := migrationsPath
 	if !strings.HasPrefix(migrationsPath, "file://") {
@@ -32,7 +31,6 @@ func NewGolangMigrateAdapter(databaseURL string, migrationsPath string) (*Golang
 	return &GolangMigrateAdapter{m: m}, nil
 }
 
-// Up runs all pending migrations up.
 func (mig *GolangMigrateAdapter) Up() error {
 	if err := mig.m.Up(); err != nil && err != migrate.ErrNoChange {
 		return err
@@ -40,7 +38,6 @@ func (mig *GolangMigrateAdapter) Up() error {
 	return nil
 }
 
-// Down rolls back the most recent migration.
 func (mig *GolangMigrateAdapter) Down() error {
 	if err := mig.m.Steps(-1); err != nil && err != migrate.ErrNoChange {
 		return err
@@ -48,12 +45,10 @@ func (mig *GolangMigrateAdapter) Down() error {
 	return nil
 }
 
-// Force sets the migration version.
 func (mig *GolangMigrateAdapter) Force(version int) error {
 	return mig.m.Force(version)
 }
 
-// Version returns the current migration version and dirty status.
 func (mig *GolangMigrateAdapter) Version() (uint, bool, error) {
 	return mig.m.Version()
 }

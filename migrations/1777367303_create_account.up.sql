@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS account (
+CREATE TABLE IF NOT EXISTS content.account (
     id BIGSERIAL PRIMARY KEY,
     username VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
@@ -8,11 +8,11 @@ CREATE TABLE IF NOT EXISTS account (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_account_username ON account(username);
+CREATE INDEX IF NOT EXISTS idx_account__username ON content.account (username);
 
-DROP TRIGGER IF EXISTS trg_account_updated_at ON account;
+DROP TRIGGER IF EXISTS trg_account_updated_at ON content.account;
 
-CREATE TRIGGER trg_account_updated_at
-    BEFORE UPDATE ON account
+CREATE TRIGGER trg_account_update_updated_at_bu
+    BEFORE UPDATE ON content.account
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+    EXECUTE FUNCTION public.trg_update_updated_at();

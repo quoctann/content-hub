@@ -6,8 +6,6 @@ import (
 	"github.com/quoctann/content-hub/internal/domain"
 )
 
-// ContentResponse is the DTO exposed in API responses.
-// It only contains fields safe to expose to clients.
 type ContentResponse struct {
 	ID        int64              `json:"id"`
 	Title     *string            `json:"title"`
@@ -22,7 +20,6 @@ type ContentResponse struct {
 	UpdatedAt *time.Time         `json:"updated_at"`
 }
 
-// ToContentResponse converts a domain.Content to ContentResponse.
 func ToContentResponse(c *domain.Content) *ContentResponse {
 	return &ContentResponse{
 		ID:        c.ID,
@@ -39,7 +36,6 @@ func ToContentResponse(c *domain.Content) *ContentResponse {
 	}
 }
 
-// ToContentResponseList converts a slice of domain.Content to a slice of ContentResponse.
 func ToContentResponseList(contents []domain.Content) []ContentResponse {
 	responses := make([]ContentResponse, len(contents))
 	for i, c := range contents {
@@ -50,7 +46,6 @@ func ToContentResponseList(contents []domain.Content) []ContentResponse {
 	return responses
 }
 
-// PaginationMetaResponse is the DTO for pagination metadata in API responses.
 type PaginationMetaResponse struct {
 	TotalCount int64  `json:"total_count"`
 	PageSize   int64  `json:"page_size"`
@@ -59,13 +54,11 @@ type PaginationMetaResponse struct {
 	HasMore    bool   `json:"has_more"`
 }
 
-// ContentSearchResponseWrapper wraps search results with pagination metadata.
 type ContentSearchResponseWrapper struct {
 	Items      []ContentResponse      `json:"items"`
 	Pagination PaginationMetaResponse `json:"pagination"`
 }
 
-// ToContentSearchResponse converts a domain.ContentSearchResult to ContentSearchResponseWrapper.
 func ToContentSearchResponse(result *domain.ContentSearchResult) *ContentSearchResponseWrapper {
 	return &ContentSearchResponseWrapper{
 		Items: ToContentResponseList(result.Items),
@@ -79,7 +72,6 @@ func ToContentSearchResponse(result *domain.ContentSearchResult) *ContentSearchR
 	}
 }
 
-// AdminPaginationResponse is the DTO for admin pagination with page-based navigation.
 type AdminPaginationResponse struct {
 	TotalCount int64 `json:"total_count"`
 	Page       int64 `json:"page"`
@@ -87,7 +79,6 @@ type AdminPaginationResponse struct {
 	TotalPages int64 `json:"total_pages"`
 }
 
-// AdminContentResponseWrapper wraps admin content list with page-based pagination.
 type AdminContentResponseWrapper struct {
 	Items      []ContentResponse       `json:"items"`
 	Pagination AdminPaginationResponse `json:"pagination"`

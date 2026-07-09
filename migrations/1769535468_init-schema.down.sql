@@ -1,8 +1,6 @@
--- Drop the trigger function
-DROP FUNCTION IF EXISTS update_updated_at_column();
+DROP FUNCTION IF EXISTS public.trg_update_updated_at();
 
--- Drop extensions
-DROP EXTENSION IF EXISTS "citext";
-DROP EXTENSION IF EXISTS "uuid-ossp";
-DROP EXTENSION IF EXISTS "pg_trgm";
-DROP EXTENSION IF EXISTS "unaccent";
+DROP EXTENSION IF EXISTS "citext" SCHEMA public;
+DROP EXTENSION IF EXISTS "uuid-ossp" SCHEMA public;
+DROP EXTENSION IF EXISTS "pg_trgm" SCHEMA public;
+DROP EXTENSION IF EXISTS "unaccent" SCHEMA public;

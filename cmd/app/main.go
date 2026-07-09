@@ -10,12 +10,6 @@ import (
 
 // @host      localhost:8080
 // @BasePath  /
-
-// @securityDefinitions.apikey  ApiKeyAuth
-// @in                          header
-// @name                        X-API-Key
 func main() {
-	// The API server logic is encapsulated in the commands and bootstrap packages.
-	// We simply delegate execution to the root command.
 	commands.Execute()
 }

@@ -7,10 +7,8 @@ import (
 	"time"
 )
 
-// FileBasedCreator implements domain.MigrationCreator for local file system.
 type FileBasedCreator struct{}
 
-// CreateMigration creates a pair of up/down migration files.
 func (c *FileBasedCreator) CreateMigration(migrationsPath, name string) error {
 	timestamp := time.Now().Unix()
 	upFile := filepath.Join(migrationsPath, fmt.Sprintf("%d_%s.up.sql", timestamp, name))

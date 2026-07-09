@@ -8,21 +8,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// env is kept as an optional override for APP_ENV. Setting it via flag
-// is equivalent to exporting APP_ENV=<value> in the shell before running.
 var env string
 
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "api",
 	Short: "Content Hub API Server",
-	Long: `Content Hub API Server follows clean architecture principles.
-It provides RESTful endpoints for managing content and users.`,
+	Long: `Content Hub API Server`,
 	Run: run,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

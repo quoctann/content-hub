@@ -1,4 +1,3 @@
-DROP TABLE IF EXISTS content_tags;
-DROP TABLE IF EXISTS tags;
-DROP TABLE IF EXISTS content;
-DROP FUNCTION IF EXISTS content_search_vector_update;
+DROP TABLE IF EXISTS content.content;
+
+DROP FUNCTION IF EXISTS public.trg_update_search_vector;

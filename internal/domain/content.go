@@ -15,11 +15,11 @@ const (
 type Content struct {
 	ID        int64       `json:"id"`
 	Title     *string     `json:"title"`
-	TextData  *string     `json:"text_data"` // available for text content
-	OCRText   *string     `json:"ocr_text"`  // available for image content after OCR processing
-	Caption   *string     `json:"caption"`   // available for image content
+	TextData  *string     `json:"text_data"` // Available for text content
+	OCRText   *string     `json:"ocr_text"`  // Available for image content after OCR processing
+	Caption   *string     `json:"caption"`   // Available for image content
 	Link      *string     `json:"link"`
-	FileName  *string     `json:"-"` // Internal use only, not exposed in API response
+	FileName  *string     `json:"-"` // Internal use only
 	Type      ContentType `json:"type"`
 	IsHidden  bool        `json:"is_hidden"`
 	Rank      float64     `json:"rank"` // Relevance rank from FTS, 0 if no search query
@@ -28,7 +28,6 @@ type Content struct {
 	DeletedAt *time.Time  `json:"deleted_at,omitempty"`
 }
 
-// SearchFilter holds optional filters for the Search operation.
 type SearchFilter struct {
 	// Keywords is the preferred multi-term list. Each entry is an independent token;
 	// MatchType controls whether all must appear (AND) or any suffices (OR).
@@ -53,7 +52,6 @@ type SearchFilter struct {
 	VisibilityFilter string
 }
 
-// PaginationMeta holds pagination metadata for paginated responses
 type PaginationMeta struct {
 	TotalCount int64  `json:"total_count"`
 	PageSize   int64  `json:"page_size"`
@@ -62,7 +60,6 @@ type PaginationMeta struct {
 	HasMore    bool   `json:"has_more"`
 }
 
-// ContentSearchResult wraps search results with pagination metadata
 type ContentSearchResult struct {
 	Items      []Content
 	Pagination PaginationMeta
