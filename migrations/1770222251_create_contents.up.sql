@@ -24,7 +24,7 @@ BEGIN
         setweight(to_tsvector('english', public.coalesce(NEW.caption, '')), 'A') ||
         setweight(to_tsvector('simple', public.unaccent(coalesce(NEW.ocr_text, ''))), 'B') ||
         setweight(to_tsvector('simple', public.coalesce(NEW.text_data, '')), 'C') ||
-        setweight(to_tsvector('simple', public.unaccent(coalesce(NEW.ocr_text, ''))), 'D');
+        setweight(to_tsvector('simple', public.unaccent(coalesce(NEW.title, ''))), 'D');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SET search_path = public;
@@ -32,9 +32,9 @@ $$ LANGUAGE plpgsql SET search_path = public;
 CREATE TRIGGER trg_content_update_search_vector_biu
     BEFORE INSERT OR UPDATE ON content.content
     FOR EACH ROW
-    EXECUTE FUNCTION public.trg_update_search_vector()
+    EXECUTE FUNCTION public.trg_update_search_vector();
 
 CREATE TRIGGER trg_content_update_updated_at_bu
     BEFORE UPDATE ON content.content
     FOR EACH ROW
-    EXECUTE FUNCTION public.shared__all__fn_trig_update_updated_at();
+    EXECUTE FUNCTION public.trg_update_updated_at();
