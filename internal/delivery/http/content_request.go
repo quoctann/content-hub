@@ -1,15 +1,65 @@
 package http
 
+import "github.com/quoctann/content-hub/internal/domain"
+
+type CreateContentRequest struct {
+	Title    *string `json:"title"`
+	TextData *string `json:"text_data"`
+	OCRText  *string `json:"ocr_text"`
+	Caption  *string `json:"caption"`
+	Link     *string `json:"link"`
+	Type     string  `json:"type" binding:"required,oneof=text image"`
+}
+
 type UpdateContentRequest struct {
 	Title    *string `json:"title"`
 	TextData *string `json:"text_data"`
 	OCRText  *string `json:"ocr_text"`
 	Caption  *string `json:"caption"`
 	Link     *string `json:"link"`
-	Type     *string `json:"type"`
+	Type     *string `json:"type" binding:"omitempty,oneof=text image"`
 	IsHidden *bool   `json:"is_hidden"`
 }
 
 type BulkDeleteRequest struct {
-	IDs []int64 `json:"ids"`
+	IDs []int64 `json:"ids" binding:"required,min=1,dive,min=1"`
+}
+
+type ToggleHideRequest struct {
+	Hidden *bool `json:"hidden" binding:"required"`
+}
+
+type contentIDRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+type SearchContentRequest struct {
+	Keywords  string `form:"keywords"`
+	MatchType string `form:"match_type" binding:"omitempty,oneof=and or"`
+	Type      string `form:"type" binding:"omitempty,oneof=text image"`
+	Num       int64  `form:"num" binding:"omitempty,min=1,max=100"`
+	Cursor    string `form:"cursor"`
+}
+
+type AdminListContentRequest struct {
+	Page      int64  `form:"page" binding:"omitempty,min=1"`
+	PageSize  int64  `form:"page_size" binding:"omitempty,min=1,max=100"`
+	Keywords  string `form:"keywords"`
+	MatchType string `form:"match_type" binding:"omitempty,oneof=and or"`
+	Type      string `form:"type" binding:"omitempty,oneof=text image"`
+	Visible   string `form:"visible" binding:"omitempty,oneof=true false"`
+}
+
+func (r CreateContentRequest) ToDomain() *domain.Content {
+	content := &domain.Content{
+		Title:    r.Title,
+		TextData: r.TextData,
+		OCRText:  r.OCRText,
+		Caption:  r.Caption,
+		Link:     r.Link,
+	}
+	if r.Type != "" {
+		content.Type = domain.ContentType(r.Type)
+	}
+	return content
 }

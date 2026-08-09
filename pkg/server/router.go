@@ -50,6 +50,10 @@ type Context interface {
 	Query(key string) string
 	// Bind parses the request body into the provided struct.
 	Bind(obj interface{}) error
+	// BindQuery parses and validates query parameters into the provided struct.
+	BindQuery(obj interface{}) error
+	// BindURI parses and validates path parameters into the provided struct.
+	BindURI(obj interface{}) error
 	// JSON writes a JSON response with the given HTTP status code.
 	JSON(code int, obj interface{})
 	// Status writes the HTTP status code with no body.

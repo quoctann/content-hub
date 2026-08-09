@@ -110,6 +110,14 @@ func (c *GinContext) Bind(obj interface{}) error {
 	return c.ctx.ShouldBind(obj)
 }
 
+func (c *GinContext) BindQuery(obj interface{}) error {
+	return c.ctx.ShouldBindQuery(obj)
+}
+
+func (c *GinContext) BindURI(obj interface{}) error {
+	return c.ctx.ShouldBindUri(obj)
+}
+
 func (c *GinContext) JSON(code int, obj interface{}) {
 	c.ctx.JSON(code, obj)
 }

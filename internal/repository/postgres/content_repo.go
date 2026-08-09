@@ -234,10 +234,7 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 
 	whereSQL := " WHERE " + strings.Join(conditions, " AND ")
 
-	orderSQL := " ORDER BY c.created_at DESC"
-	if hasFTS {
-		orderSQL = " ORDER BY rank DESC, c.created_at DESC"
-	}
+	orderSQL := contentOrderSQL(hasFTS)
 
 	countSQL := "SELECT COUNT(DISTINCT c.id) FROM content c" + whereSQL
 	var totalCount int64
@@ -266,6 +263,13 @@ func (r *contentRepo) Search(ctx context.Context, filter domain.SearchFilter, cu
 	}
 
 	return contents, totalCount, nil
+}
+
+func contentOrderSQL(hasFTS bool) string {
+	if hasFTS {
+		return " ORDER BY rank DESC, c.created_at DESC, c.id DESC"
+	}
+	return " ORDER BY c.created_at DESC, c.id DESC"
 }
 
 // parseCursor decodes a cursor string (a stringified integer offset) into an

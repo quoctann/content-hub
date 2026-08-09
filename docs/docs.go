@@ -176,8 +176,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Search keyword",
-                        "name": "q",
+                        "description": "Comma-separated keywords: hello,world",
+                        "name": "keywords",
                         "in": "query"
                     },
                     {
@@ -415,7 +415,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Search contents by keywords, query text, type, and tags",
+                "description": "Search contents by keywords and type",
                 "consumes": [
                     "application/json"
                 ],
@@ -437,12 +437,6 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Match type: and (all must match) or or (any match), default or",
                         "name": "match_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Search query (deprecated, use keywords)",
-                        "name": "q",
                         "in": "query"
                     },
                     {
@@ -515,7 +509,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/domain.Content"
+                            "$ref": "#/definitions/http.CreateContentRequest"
                         }
                     }
                 ],
@@ -636,51 +630,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "domain.Content": {
-            "type": "object",
-            "properties": {
-                "caption": {
-                    "description": "available for image content",
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "is_hidden": {
-                    "type": "boolean"
-                },
-                "link": {
-                    "type": "string"
-                },
-                "ocr_text": {
-                    "description": "available for image content after OCR processing",
-                    "type": "string"
-                },
-                "rank": {
-                    "description": "Relevance rank from FTS, 0 if no search query",
-                    "type": "number"
-                },
-                "text_data": {
-                    "description": "available for text content",
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "type": {
-                    "$ref": "#/definitions/domain.ContentType"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
         "domain.ContentType": {
             "type": "string",
             "enum": [
@@ -775,6 +724,36 @@ const docTemplate = `{
                 }
             }
         },
+        "http.CreateContentRequest": {
+            "type": "object",
+            "required": [
+                "type"
+            ],
+            "properties": {
+                "caption": {
+                    "type": "string"
+                },
+                "link": {
+                    "type": "string"
+                },
+                "ocr_text": {
+                    "type": "string"
+                },
+                "text_data": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "text",
+                        "image"
+                    ]
+                }
+            }
+        },
         "http.LoginRequest": {
             "type": "object",
             "required": [
@@ -834,6 +813,9 @@ const docTemplate = `{
         },
         "http.ToggleHideRequest": {
             "type": "object",
+            "required": [
+                "hidden"
+            ],
             "properties": {
                 "hidden": {
                     "type": "boolean"
@@ -862,16 +844,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "text",
+                        "image"
+                    ]
                 }
             }
-        }
-    },
-    "securityDefinitions": {
-        "ApiKeyAuth": {
-            "type": "apiKey",
-            "name": "X-API-Key",
-            "in": "header"
         }
     }
 }`

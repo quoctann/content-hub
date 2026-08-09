@@ -1,36 +1,5 @@
 basePath: /
 definitions:
-  domain.Content:
-    properties:
-      caption:
-        description: available for image content
-        type: string
-      created_at:
-        type: string
-      deleted_at:
-        type: string
-      id:
-        type: integer
-      is_hidden:
-        type: boolean
-      link:
-        type: string
-      ocr_text:
-        description: available for image content after OCR processing
-        type: string
-      rank:
-        description: Relevance rank from FTS, 0 if no search query
-        type: number
-      text_data:
-        description: available for text content
-        type: string
-      title:
-        type: string
-      type:
-        $ref: '#/definitions/domain.ContentType'
-      updated_at:
-        type: string
-    type: object
   domain.ContentType:
     enum:
     - text
@@ -93,6 +62,26 @@ definitions:
       pagination:
         $ref: '#/definitions/http.PaginationMetaResponse'
     type: object
+  http.CreateContentRequest:
+    properties:
+      caption:
+        type: string
+      link:
+        type: string
+      ocr_text:
+        type: string
+      text_data:
+        type: string
+      title:
+        type: string
+      type:
+        enum:
+        - text
+        - image
+        type: string
+    required:
+    - type
+    type: object
   http.LoginRequest:
     properties:
       password:
@@ -134,6 +123,8 @@ definitions:
     properties:
       hidden:
         type: boolean
+    required:
+    - hidden
     type: object
   http.UpdateContentRequest:
     properties:
@@ -150,6 +141,9 @@ definitions:
       title:
         type: string
       type:
+        enum:
+        - text
+        - image
         type: string
     type: object
 host: localhost:8080
@@ -258,9 +252,9 @@ paths:
         in: query
         name: page_size
         type: integer
-      - description: Search keyword
+      - description: 'Comma-separated keywords: hello,world'
         in: query
-        name: q
+        name: keywords
         type: string
       - description: Content type filter (image, text)
         in: query
@@ -419,7 +413,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: Search contents by keywords, query text, type, and tags
+      description: Search contents by keywords and type
       parameters:
       - description: 'Comma-separated keywords: hello,world'
         in: query
@@ -429,10 +423,6 @@ paths:
           or'
         in: query
         name: match_type
-        type: string
-      - description: Search query (deprecated, use keywords)
-        in: query
-        name: q
         type: string
       - description: Content type filter (image, text)
         in: query
@@ -480,7 +470,7 @@ paths:
         name: content
         required: true
         schema:
-          $ref: '#/definitions/domain.Content'
+          $ref: '#/definitions/http.CreateContentRequest'
       produces:
       - application/json
       responses:
@@ -561,9 +551,4 @@ paths:
       summary: Liveness probe
       tags:
       - health
-securityDefinitions:
-  ApiKeyAuth:
-    in: header
-    name: X-API-Key
-    type: apiKey
 swagger: "2.0"

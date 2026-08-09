@@ -46,6 +46,12 @@ var validContentTypes = map[domain.ContentType]bool{
 	domain.Image: true,
 }
 
+const maxInt64 = int64(1<<63 - 1)
+
+func invalidRequest(c server.Context, err error) {
+	c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+}
+
 func parseKeywords(kw string) []string {
 	if kw == "" {
 		return nil
@@ -70,14 +76,11 @@ func parseContentType(typeStr string) (domain.ContentType, string) {
 }
 
 // clampPageSize ensures pageSize is between 1 and max (inclusive).
-func clampPageSize(pageSize, max int64) int64 {
-	if pageSize < 1 {
-		return 1
+func paginationOffset(page, pageSize int64) (int64, bool) {
+	if page < 1 || pageSize < 1 || page > maxInt64/pageSize+1 {
+		return 0, false
 	}
-	if pageSize > max {
-		return max
-	}
-	return pageSize
+	return (page - 1) * pageSize, true
 }
 
 // Search godoc
@@ -97,20 +100,27 @@ func clampPageSize(pageSize, max int64) int64 {
 // @Security     ApiKeyAuth
 // @Router       /contents [get]
 func (h *ContentHandler) Search(c server.Context) {
-	num, _ := strconv.ParseInt(c.Query("num"), 10, 64)
-	cursor := c.Query("cursor")
+	var req SearchContentRequest
+	if err := c.BindQuery(&req); err != nil {
+		invalidRequest(c, err)
+		return
+	}
+	num := req.Num
+	if num == 0 {
+		num = 10
+	}
 
 	filter := domain.SearchFilter{}
 
-	if keywords := parseKeywords(c.Query("keywords")); keywords != nil {
+	if keywords := parseKeywords(req.Keywords); keywords != nil {
 		filter.Keywords = keywords
-		filter.MatchType = c.Query("match_type")
+		filter.MatchType = req.MatchType
 		if filter.MatchType == "" {
 			filter.MatchType = "or"
 		}
 	}
 
-	if typeStr := c.Query("type"); typeStr != "" {
+	if typeStr := req.Type; typeStr != "" {
 		ct, errMsg := parseContentType(typeStr)
 		if errMsg != "" {
 			c.JSON(http.StatusBadRequest, map[string]string{"error": errMsg})
@@ -119,7 +129,7 @@ func (h *ContentHandler) Search(c server.Context) {
 		filter.ContentType = ct
 	}
 
-	result, err := h.CUsecase.Search(c.Request().Context(), filter, cursor, num)
+	result, err := h.CUsecase.Search(c.Request().Context(), filter, req.Cursor, num)
 	if err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to search contents", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
@@ -135,26 +145,27 @@ func (h *ContentHandler) Search(c server.Context) {
 // @Tags         contents
 // @Accept       json
 // @Produce      json
-// @Param        content  body      domain.Content  true  "Content"
+// @Param        content  body      CreateContentRequest  true  "Content"
 // @Success      201      {object}  ContentResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Security     ApiKeyAuth
 // @Router       /contents [post]
 func (h *ContentHandler) Store(c server.Context) {
-	var content domain.Content
-	if err := c.Bind(&content); err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	var req CreateContentRequest
+	if err := c.Bind(&req); err != nil {
+		invalidRequest(c, err)
 		return
 	}
+	content := req.ToDomain()
 
-	if err := h.CUsecase.Create(c.Request().Context(), &content); err != nil {
+	if err := h.CUsecase.Create(c.Request().Context(), content); err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to store content", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, ToContentResponse(&content))
+	c.JSON(http.StatusCreated, ToContentResponse(content))
 }
 
 // Update godoc
@@ -171,10 +182,16 @@ func (h *ContentHandler) Store(c server.Context) {
 // @Security     ApiKeyAuth
 // @Router       /contents/{id} [put]
 func (h *ContentHandler) Update(c server.Context) {
-	idS := c.Param("id")
-	id, err := strconv.ParseInt(idS, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+	var path contentIDRequest
+	if err := c.BindURI(&path); err != nil {
+		invalidRequest(c, err)
+		return
+	}
+	id := path.ID
+
+	var req UpdateContentRequest
+	if err := c.Bind(&req); err != nil {
+		invalidRequest(c, err)
 		return
 	}
 
@@ -183,12 +200,6 @@ func (h *ContentHandler) Update(c server.Context) {
 	if err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to fetch existing content", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-		return
-	}
-
-	var req UpdateContentRequest
-	if err := c.Bind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
@@ -247,27 +258,31 @@ func (h *ContentHandler) Update(c server.Context) {
 // @Security   ApiKeyAuth
 // @Router    /admin/contents [get]
 func (h *ContentHandler) AdminList(ctx server.Context) {
-	page, _ := strconv.ParseInt(ctx.Query("page"), 10, 64)
-	if page < 1 {
+	var req AdminListContentRequest
+	if err := ctx.BindQuery(&req); err != nil {
+		invalidRequest(ctx, err)
+		return
+	}
+	page := req.Page
+	if page == 0 {
 		page = 1
 	}
 
-	pageSize, _ := strconv.ParseInt(ctx.Query("page_size"), 10, 64)
-	if pageSize < 1 {
+	pageSize := req.PageSize
+	if pageSize == 0 {
 		pageSize = 20 // default
 	}
-	pageSize = clampPageSize(pageSize, 100)
 
 	filter := domain.SearchFilter{IncludeHidden: true}
-	if keywords := parseKeywords(ctx.Query("keywords")); keywords != nil {
+	if keywords := parseKeywords(req.Keywords); keywords != nil {
 		filter.Keywords = keywords
-		filter.MatchType = ctx.Query("match_type")
+		filter.MatchType = req.MatchType
 		if filter.MatchType == "" {
 			filter.MatchType = "or"
 		}
 	}
 
-	if typeStr := ctx.Query("type"); typeStr != "" {
+	if typeStr := req.Type; typeStr != "" {
 		ct, errMsg := parseContentType(typeStr)
 		if errMsg != "" {
 			ctx.JSON(http.StatusBadRequest, map[string]string{"error": errMsg})
@@ -276,11 +291,15 @@ func (h *ContentHandler) AdminList(ctx server.Context) {
 		filter.ContentType = ct
 	}
 
-	if vis := ctx.Query("visible"); vis == "true" || vis == "false" {
+	if vis := req.Visible; vis != "" {
 		filter.VisibilityFilter = vis
 	}
 
-	offset := (page - 1) * pageSize
+	offset, ok := paginationOffset(page, pageSize)
+	if !ok {
+		invalidRequest(ctx, nil)
+		return
+	}
 	cursor := strconv.FormatInt(offset, 10)
 
 	result, err := h.CUsecase.Search(ctx.Request().Context(), filter, cursor, pageSize)
@@ -307,12 +326,12 @@ func (h *ContentHandler) AdminList(ctx server.Context) {
 // @Security     ApiKeyAuth
 // @Router       /admin/contents/{id} [get]
 func (h *ContentHandler) GetByID(c server.Context) {
-	idS := c.Param("id")
-	id, err := strconv.ParseInt(idS, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+	var path contentIDRequest
+	if err := c.BindURI(&path); err != nil {
+		invalidRequest(c, err)
 		return
 	}
+	id := path.ID
 
 	content, err := h.CUsecase.GetByID(c.Request().Context(), id)
 	if err != nil {
@@ -338,12 +357,12 @@ func (h *ContentHandler) GetByID(c server.Context) {
 // @Security     ApiKeyAuth
 // @Router       /admin/contents/{id} [delete]
 func (h *ContentHandler) Delete(c server.Context) {
-	idS := c.Param("id")
-	id, err := strconv.ParseInt(idS, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+	var path contentIDRequest
+	if err := c.BindURI(&path); err != nil {
+		invalidRequest(c, err)
 		return
 	}
+	id := path.ID
 
 	if err := h.CUsecase.Delete(c.Request().Context(), id); err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to delete content", logger.Error(err))
@@ -352,11 +371,6 @@ func (h *ContentHandler) Delete(c server.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
-}
-
-// ToggleHideRequest represents the request body for toggle hide
-type ToggleHideRequest struct {
-	Hidden bool `json:"hidden"`
 }
 
 // ToggleHide godoc
@@ -374,20 +388,20 @@ type ToggleHideRequest struct {
 // @Security     ApiKeyAuth
 // @Router       /admin/contents/{id}/hide [patch]
 func (h *ContentHandler) ToggleHide(c server.Context) {
-	idS := c.Param("id")
-	id, err := strconv.ParseInt(idS, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+	var path contentIDRequest
+	if err := c.BindURI(&path); err != nil {
+		invalidRequest(c, err)
 		return
 	}
+	id := path.ID
 
 	var req ToggleHideRequest
 	if err := c.Bind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		invalidRequest(c, err)
 		return
 	}
 
-	if err := h.CUsecase.SetHidden(c.Request().Context(), id, req.Hidden); err != nil {
+	if err := h.CUsecase.SetHidden(c.Request().Context(), id, *req.Hidden); err != nil {
 		h.Logger.Error(c.Request().Context(), "failed to toggle hide", logger.Error(err))
 		c.JSON(http.StatusNotFound, map[string]string{"error": "content not found"})
 		return
@@ -406,7 +420,7 @@ func (h *ContentHandler) ToggleHide(c server.Context) {
 func (h *ContentHandler) BulkDelete(c server.Context) {
 	var req BulkDeleteRequest
 	if err := c.Bind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		invalidRequest(c, err)
 		return
 	}
 
