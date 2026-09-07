@@ -22,6 +22,8 @@ No YAML files are needed.
 type Config struct {
 	Server   Server
 	Logger   Logger
+	Tracing  Tracing
+	Metrics  Metrics
 	Database Database
 	Security Security
 }
@@ -34,6 +36,18 @@ type Server struct {
 
 type Logger struct {
 	Level string `env:"LOGGER_LEVEL" envDefault:"info"`
+}
+
+type Tracing struct {
+	OTLPEndpoint string  `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	SampleRatio  float64 `env:"OTEL_TRACES_SAMPLER_ARG" envDefault:"0.1"`
+	ServiceName  string  `env:"OTEL_SERVICE_NAME" envDefault:"content-hub"`
+	ServiceVer   string  `env:"SERVICE_VERSION" envDefault:"unknown"`
+	TLS          bool    `env:"OTEL_EXPORTER_OTLP_TLS" envDefault:"false"`
+}
+
+type Metrics struct {
+	Port string `env:"METRICS_PORT" envDefault:"9090"`
 }
 
 type Database struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -197,11 +198,19 @@ func extractTraceInfo(ctx context.Context) []Field {
 	if reqID, ok := ctx.Value(RequestIDKey).(string); ok && reqID != "" {
 		fields = append(fields, String("request_id", reqID))
 	}
-	if traceID, ok := ctx.Value(TraceIDKey).(string); ok && traceID != "" {
-		fields = append(fields, String("trace_id", traceID))
-	}
-	if spanID, ok := ctx.Value(SpanIDKey).(string); ok && spanID != "" {
-		fields = append(fields, String("span_id", spanID))
+	spanContext := trace.SpanContextFromContext(ctx)
+	if spanContext.IsValid() {
+		fields = append(fields,
+			String("trace_id", spanContext.TraceID().String()),
+			String("span_id", spanContext.SpanID().String()),
+		)
+	} else {
+		if traceID, ok := ctx.Value(TraceIDKey).(string); ok && traceID != "" {
+			fields = append(fields, String("trace_id", traceID))
+		}
+		if spanID, ok := ctx.Value(SpanIDKey).(string); ok && spanID != "" {
+			fields = append(fields, String("span_id", spanID))
+		}
 	}
 
 	return fields

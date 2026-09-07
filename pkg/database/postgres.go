@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/quoctann/content-hub/pkg/config"
@@ -50,7 +52,10 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 		Logger:   NewLoggerAdapter(l),
 		LogLevel: dbLogLevel,
 	}
-	poolConfig.ConnConfig.Tracer = dbTracer
+	poolConfig.ConnConfig.Tracer = multitracer.New(
+		dbTracer,
+		otelpgx.NewTracer(otelpgx.WithDisableSQLStatementInAttributes()),
+	)
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
@@ -59,6 +64,7 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 
 	// Verify connection
 	if err := pool.Ping(context.Background()); err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -70,6 +76,7 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 		QueryRow(context.Background(), `SELECT current_database(), current_user, current_setting('search_path'), current_schemas(false)`).
 		Scan(&dbName, &user, &searchPath, &schemas)
 	if err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("failed to verify db config: %w", err)
 	}
 

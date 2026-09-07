@@ -2,17 +2,24 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	traceMiddleware "github.com/quoctann/content-hub/internal/delivery/http/middleware"
 	"github.com/quoctann/content-hub/pkg/logger"
 	"github.com/quoctann/content-hub/pkg/middleware"
+	"github.com/quoctann/content-hub/pkg/observability"
 	"github.com/quoctann/content-hub/pkg/server"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 type App struct {
-	deps   *Dependencies
-	server server.Server
+	deps          *Dependencies
+	server        server.Server
+	metricsServer *http.Server
 }
 
 func NewApp() (*App, error) {
@@ -43,7 +50,11 @@ func NewApp() (*App, error) {
 
 		// Apply CORS middleware
 		ginRouter := srv.Engine()
-		ginRouter.Use(middleware.CORSMiddleware(app.deps.Config))
+		ginRouter.Use(
+			traceMiddleware.TraceMiddleware(),
+			otelgin.Middleware(app.deps.Config.Tracing.ServiceName),
+			middleware.CORSMiddleware(app.deps.Config),
+		)
 
 		// Apply security headers middleware
 		srv.Router().Use(middleware.SecurityHeaders(middleware.CSPOptions{
@@ -63,19 +74,58 @@ func NewApp() (*App, error) {
 			return err
 		}
 
+		// Metrics
+		metrics, err := observability.NewMetrics(nil)
+		if err != nil {
+			return err
+		}
+		if err := observability.RegisterDatabasePoolMetrics(nil, app.deps.DBPool); err != nil {
+			return err
+		}
+
+		ginRouter.Use(metrics.Middleware())
+
+		metricsListener, err := net.Listen("tcp", ":"+app.deps.Config.Metrics.Port)
+		if err != nil {
+			return fmt.Errorf("listen for metrics: %w", err)
+		}
+		app.metricsServer = &http.Server{Handler: metrics.Handler()}
+		go func() {
+			_ = app.metricsServer.Serve(metricsListener)
+		}()
+
 		SetupRouter(srv.Router(), app.deps)
 		return nil
 	})
 
 	srv.OnAfterStop(func() error {
 		app.deps.Logger.InfoWithoutCtx("Shutting down server...")
+		if app.metricsServer != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := app.metricsServer.Shutdown(ctx)
+			cancel()
+			if err != nil {
+				return err
+			}
+		}
+
 		if app.deps.DBPool != nil {
 			app.deps.DBPool.Close()
 		}
+
+		if app.deps.TracingShutdown != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := app.deps.TracingShutdown(ctx)
+			cancel()
+			if err != nil {
+				return err
+			}
+		}
+
+		app.deps.Logger.InfoWithoutCtx("Server exited gracefully")
 		if app.deps.Logger != nil {
 			_ = app.deps.Logger.Sync()
 		}
-		app.deps.Logger.InfoWithoutCtx("Server exited gracefully")
 		return nil
 	})
 
@@ -83,6 +133,22 @@ func NewApp() (*App, error) {
 }
 
 func (a *App) Start() error {
+	defer func() {
+		if a.metricsServer != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = a.metricsServer.Shutdown(ctx)
+		}
+	}()
+
+	if a.deps.TracingShutdown != nil {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = a.deps.TracingShutdown(ctx)
+		}()
+	}
+
 	return a.server.Start()
 }
 

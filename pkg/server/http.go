@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/quoctann/content-hub/pkg/logger"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // HTTPConfig defines the configuration for the HTTP server
@@ -92,11 +93,10 @@ func ginJSONLogger() gin.HandlerFunc {
 		if requestID := traceValue(c, "X-Request-ID", logger.RequestIDKey); requestID != "" {
 			entry["request_id"] = requestID
 		}
-		if traceID := traceValue(c, "X-Trace-ID", logger.TraceIDKey); traceID != "" {
-			entry["trace_id"] = traceID
-		}
-		if spanID := traceValue(c, "X-Span-ID", logger.SpanIDKey); spanID != "" {
-			entry["span_id"] = spanID
+		spanContext := trace.SpanContextFromContext(c.Request.Context())
+		if spanContext.IsValid() {
+			entry["trace_id"] = spanContext.TraceID().String()
+			entry["span_id"] = spanContext.SpanID().String()
 		}
 		if errs := c.Errors.String(); errs != "" {
 			entry["error"] = errs
@@ -113,17 +113,32 @@ func ginJSONLogger() gin.HandlerFunc {
 
 func ginJSONRecovery() gin.HandlerFunc {
 	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
-		writeJSONLog(os.Stderr, map[string]interface{}{
+		entry := map[string]interface{}{
 			"timestamp":  time.Now().Format(time.RFC3339Nano),
 			"level":      "error",
+			"service":    "content-hub",
+			"env":        os.Getenv("APP_ENV"),
 			"msg":        "panic_recovered",
 			"error":      fmt.Sprint(recovered),
 			"method":     c.Request.Method,
 			"path":       c.Request.URL.Path,
 			"stacktrace": string(debug.Stack()),
-		})
+		}
+		addTraceFields(c, entry)
+		writeJSONLog(os.Stderr, entry)
 		c.AbortWithStatus(http.StatusInternalServerError)
 	})
+}
+
+func addTraceFields(c *gin.Context, entry map[string]interface{}) {
+	if requestID := traceValue(c, "X-Request-ID", logger.RequestIDKey); requestID != "" {
+		entry["request_id"] = requestID
+	}
+	spanContext := trace.SpanContextFromContext(c.Request.Context())
+	if spanContext.IsValid() {
+		entry["trace_id"] = spanContext.TraceID().String()
+		entry["span_id"] = spanContext.SpanID().String()
+	}
 }
 
 func writeJSONLog(file *os.File, entry map[string]interface{}) {

@@ -8,8 +8,6 @@ import (
 
 const (
 	HeaderRequestID = "X-Request-ID"
-	HeaderTraceID   = "X-Trace-ID"
-	HeaderSpanID    = "X-Span-ID"
 )
 
 func TraceMiddleware() gin.HandlerFunc {
@@ -22,22 +20,10 @@ func TraceMiddleware() gin.HandlerFunc {
 		c.Writer.Header().Set(HeaderRequestID, reqID)
 		c.Set(logger.RequestIDKey, reqID)
 
-		// Trace ID (Propagate if exists, else generate)
-		traceID := c.GetHeader(HeaderTraceID)
-		if traceID == "" {
-			traceID = uuid.New().String()
-		}
-		c.Writer.Header().Set(HeaderTraceID, traceID)
-		c.Set(logger.TraceIDKey, traceID)
-
-		// Span ID (New span for this service)
-		spanID := uuid.New().String()
-		c.Writer.Header().Set(HeaderSpanID, spanID)
-		c.Set(logger.SpanIDKey, spanID)
-
-		// Update and wrap the context so that logger.extractTraceInfo can consume it
+		// OpenTelemetry owns W3C trace propagation; this middleware only creates
+		// the application-level request correlation identifier.
 		ctx := c.Request.Context()
-		ctx = logger.WithTraceContext(ctx, reqID, traceID, spanID)
+		ctx = logger.WithTraceContext(ctx, reqID, "", "")
 		c.Request = c.Request.WithContext(ctx)
 
 		c.Next()
