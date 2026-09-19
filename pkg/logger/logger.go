@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -169,39 +170,38 @@ func (l *zapLogger) Sync() error {
 	return l.zap.Sync()
 }
 
-// Trace Context Keys
-const (
-	TraceIDKey   = "trace_id"
-	SpanIDKey    = "span_id"
-	RequestIDKey = "request_id"
-)
+const RequestIDKey = "request_id"
 
-// WithTraceContext adds tracing information to the context
-func WithTraceContext(ctx context.Context, reqID, traceID, spanID string) context.Context {
-	if reqID != "" {
-		ctx = context.WithValue(ctx, RequestIDKey, reqID)
+type contextKey string
+
+const requestIDContextKey contextKey = RequestIDKey
+
+// WithRequestID adds a request ID to a context for structured logging.
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	if requestID == "" {
+		return ctx
 	}
-	if traceID != "" {
-		ctx = context.WithValue(ctx, TraceIDKey, traceID)
-	}
-	if spanID != "" {
-		ctx = context.WithValue(ctx, SpanIDKey, spanID)
-	}
-	return ctx
+	return context.WithValue(ctx, requestIDContextKey, requestID)
+}
+
+// RequestIDFromContext returns the request ID stored in ctx.
+func RequestIDFromContext(ctx context.Context) string {
+	requestID, _ := ctx.Value(requestIDContextKey).(string)
+	return requestID
 }
 
 // extractTraceInfo extracts tracing information from the context
 func extractTraceInfo(ctx context.Context) []Field {
 	var fields []Field
 
-	if reqID, ok := ctx.Value(RequestIDKey).(string); ok && reqID != "" {
+	if reqID := RequestIDFromContext(ctx); reqID != "" {
 		fields = append(fields, String("request_id", reqID))
 	}
-	if traceID, ok := ctx.Value(TraceIDKey).(string); ok && traceID != "" {
-		fields = append(fields, String("trace_id", traceID))
-	}
-	if spanID, ok := ctx.Value(SpanIDKey).(string); ok && spanID != "" {
-		fields = append(fields, String("span_id", spanID))
+	if spanContext := trace.SpanContextFromContext(ctx); spanContext.IsValid() {
+		fields = append(fields,
+			String("trace_id", spanContext.TraceID().String()),
+			String("span_id", spanContext.SpanID().String()),
+		)
 	}
 
 	return fields

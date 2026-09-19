@@ -13,11 +13,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/quoctann/content-hub/pkg/logger"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // HTTPConfig defines the configuration for the HTTP server
 type HTTPConfig struct {
 	Addr            string
+	ServiceName     string
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	ShutdownTimeout time.Duration
@@ -30,6 +32,7 @@ type HTTPOption func(*HTTPServer)
 type HTTPServer struct {
 	*HookManager
 	config     HTTPConfig
+	middleware []gin.HandlerFunc
 	engine     *gin.Engine
 	httpServer *http.Server
 }
@@ -40,6 +43,7 @@ func NewHTTPServer(opts ...HTTPOption) *HTTPServer {
 		HookManager: &HookManager{},
 		config: HTTPConfig{
 			Addr:            ":8080",
+			ServiceName:     "content-hub-backend",
 			ReadTimeout:     5 * time.Second,
 			WriteTimeout:    10 * time.Second,
 			ShutdownTimeout: 10 * time.Second,
@@ -50,7 +54,7 @@ func NewHTTPServer(opts ...HTTPOption) *HTTPServer {
 		opt(s)
 	}
 
-	s.engine = newGinEngine()
+	s.engine = newGinEngine(s.config.ServiceName, s.middleware...)
 
 	s.httpServer = &http.Server{
 		Addr:           s.config.Addr,
@@ -63,41 +67,36 @@ func NewHTTPServer(opts ...HTTPOption) *HTTPServer {
 	return s
 }
 
-func newGinEngine() *gin.Engine {
+func newGinEngine(serviceName string, outerMiddleware ...gin.HandlerFunc) *gin.Engine {
 	engine := gin.New()
-	engine.Use(ginJSONLogger(), ginJSONRecovery())
+	engine.Use(outerMiddleware...)
+	engine.Use(ginJSONLogger(serviceName), ginJSONRecovery())
 	return engine
 }
 
-func ginJSONLogger() gin.HandlerFunc {
+func ginJSONLogger(serviceName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
 
+		path := c.FullPath()
+		if path == "" {
+			path = "unmatched"
+		}
 		entry := map[string]interface{}{
 			"timestamp":  time.Now().Format(time.RFC3339Nano),
 			"level":      "info",
-			"service":    "content-hub",
+			"service":    serviceName,
 			"env":        os.Getenv("APP_ENV"),
 			"msg":        "http_request",
 			"status":     c.Writer.Status(),
 			"latency_ms": float64(time.Since(start).Microseconds()) / 1000,
-			"client_ip":  c.ClientIP(),
 			"method":     c.Request.Method,
-			"path":       c.Request.URL.Path,
-			"user_agent": c.Request.UserAgent(),
+			"path":       path,
 			"body_size":  c.Writer.Size(),
 		}
 
-		if requestID := traceValue(c, "X-Request-ID", logger.RequestIDKey); requestID != "" {
-			entry["request_id"] = requestID
-		}
-		if traceID := traceValue(c, "X-Trace-ID", logger.TraceIDKey); traceID != "" {
-			entry["trace_id"] = traceID
-		}
-		if spanID := traceValue(c, "X-Span-ID", logger.SpanIDKey); spanID != "" {
-			entry["span_id"] = spanID
-		}
+		addCorrelationFields(entry, c.Request.Context())
 		if errs := c.Errors.String(); errs != "" {
 			entry["error"] = errs
 		}
@@ -113,7 +112,7 @@ func ginJSONLogger() gin.HandlerFunc {
 
 func ginJSONRecovery() gin.HandlerFunc {
 	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
-		writeJSONLog(os.Stderr, map[string]interface{}{
+		entry := map[string]interface{}{
 			"timestamp":  time.Now().Format(time.RFC3339Nano),
 			"level":      "error",
 			"msg":        "panic_recovered",
@@ -121,7 +120,9 @@ func ginJSONRecovery() gin.HandlerFunc {
 			"method":     c.Request.Method,
 			"path":       c.Request.URL.Path,
 			"stacktrace": string(debug.Stack()),
-		})
+		}
+		addCorrelationFields(entry, c.Request.Context())
+		writeJSONLog(os.Stderr, entry)
 		c.AbortWithStatus(http.StatusInternalServerError)
 	})
 }
@@ -134,16 +135,14 @@ func writeJSONLog(file *os.File, entry map[string]interface{}) {
 	_, _ = file.Write(append(encoded, '\n'))
 }
 
-func traceValue(c *gin.Context, headerName, contextKey string) string {
-	if value := c.GetHeader(headerName); value != "" {
-		return value
+func addCorrelationFields(entry map[string]interface{}, ctx context.Context) {
+	if requestID := logger.RequestIDFromContext(ctx); requestID != "" {
+		entry["request_id"] = requestID
 	}
-	if value, ok := c.Get(contextKey); ok {
-		if valueString, ok := value.(string); ok {
-			return valueString
-		}
+	if spanContext := trace.SpanContextFromContext(ctx); spanContext.IsValid() {
+		entry["trace_id"] = spanContext.TraceID().String()
+		entry["span_id"] = spanContext.SpanID().String()
 	}
-	return ""
 }
 
 // WithGinMode sets the Gin mode (debug or release)
@@ -156,6 +155,15 @@ func WithGinMode(mode string) HTTPOption {
 // Functional options
 func WithAddr(addr string) HTTPOption {
 	return func(s *HTTPServer) { s.config.Addr = addr }
+}
+
+func WithServiceName(serviceName string) HTTPOption {
+	return func(s *HTTPServer) { s.config.ServiceName = serviceName }
+}
+
+// WithGinMiddleware registers middleware outside access logging and recovery.
+func WithGinMiddleware(middleware ...gin.HandlerFunc) HTTPOption {
+	return func(s *HTTPServer) { s.middleware = append(s.middleware, middleware...) }
 }
 
 func WithReadTimeout(d time.Duration) HTTPOption {

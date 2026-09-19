@@ -20,10 +20,11 @@ No YAML files are needed.
 */
 
 type Config struct {
-	Server   Server
-	Logger   Logger
-	Database Database
-	Security Security
+	Server        Server
+	Logger        Logger
+	Database      Database
+	Security      Security
+	Observability Observability
 }
 
 type Server struct {
@@ -34,6 +35,13 @@ type Server struct {
 
 type Logger struct {
 	Level string `env:"LOGGER_LEVEL" envDefault:"info"`
+}
+
+type Observability struct {
+	OTelSDKDisabled          bool   `env:"OTEL_SDK_DISABLED" envDefault:"true"`
+	OTelExporterOTLPEndpoint string `env:"OTEL_EXPORTER_OTLP_ENDPOINT" envDefault:"localhost:4317"`
+	OTelExporterOTLPInsecure bool   `env:"OTEL_EXPORTER_OTLP_INSECURE" envDefault:"true"`
+	OTelServiceName          string `env:"OTEL_SERVICE_NAME" envDefault:"content-hub-backend"`
 }
 
 type Database struct {

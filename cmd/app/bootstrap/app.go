@@ -2,12 +2,15 @@ package bootstrap
 
 import (
 	"context"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/quoctann/content-hub/pkg/logger"
 	"github.com/quoctann/content-hub/pkg/middleware"
 	"github.com/quoctann/content-hub/pkg/server"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 type App struct {
@@ -29,6 +32,16 @@ func NewApp() (*App, error) {
 
 	srv := server.NewHTTPServer(
 		server.WithAddr(":"+deps.Config.Server.Port),
+		server.WithServiceName(deps.Config.Observability.OTelServiceName),
+		server.WithGinMiddleware(
+			middleware.RequestIDMiddleware(),
+			otelgin.Middleware(
+				deps.Config.Observability.OTelServiceName,
+				otelgin.WithFilter(func(request *http.Request) bool {
+					return request.URL.Path != "/health" && !strings.HasPrefix(request.URL.Path, "/health/")
+				}),
+			),
+		),
 		server.WithShutdownTimeout(30*time.Second),
 		server.WithGinMode(ginMode),
 	)
@@ -69,13 +82,7 @@ func NewApp() (*App, error) {
 
 	srv.OnAfterStop(func() error {
 		app.deps.Logger.InfoWithoutCtx("Shutting down server...")
-		if app.deps.DBPool != nil {
-			app.deps.DBPool.Close()
-		}
-		if app.deps.Logger != nil {
-			_ = app.deps.Logger.Sync()
-		}
-		app.deps.Logger.InfoWithoutCtx("Server exited gracefully")
+		app.deps.Close()
 		return nil
 	})
 
@@ -83,6 +90,7 @@ func NewApp() (*App, error) {
 }
 
 func (a *App) Start() error {
+	defer a.deps.Close()
 	return a.server.Start()
 }
 

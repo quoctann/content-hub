@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/quoctann/content-hub/pkg/config"
@@ -29,7 +31,7 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 
 	if cfg.Database.Schema != "" {
 		poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-			_, err := conn.Exec(ctx, fmt.Sprintf("SET search_path TO %s", cfg.Database.Schema))
+			_, err := conn.Exec(ctx, "SET search_path TO "+pgx.Identifier{cfg.Database.Schema}.Sanitize())
 			return err
 		}
 	}
@@ -47,10 +49,16 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 		dbLogLevel = tracelog.LogLevelDebug
 	}
 	dbTracer := &tracelog.TraceLog{
-		Logger:   NewLoggerAdapter(l),
+		Logger:   NewLoggerAdapter(l, dbLogLevel != tracelog.LogLevelDebug),
 		LogLevel: dbLogLevel,
 	}
-	poolConfig.ConnConfig.Tracer = dbTracer
+	poolConfig.ConnConfig.Tracer = multitracer.New(
+		dbTracer,
+		otelpgx.NewTracer(
+			otelpgx.WithDisableSQLStatementInAttributes(),
+			otelpgx.WithDisableConnectionDetailsInAttributes(),
+		),
+	)
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
@@ -59,6 +67,7 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 
 	// Verify connection
 	if err := pool.Ping(context.Background()); err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -70,6 +79,7 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 		QueryRow(context.Background(), `SELECT current_database(), current_user, current_setting('search_path'), current_schemas(false)`).
 		Scan(&dbName, &user, &searchPath, &schemas)
 	if err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("failed to verify db config: %w", err)
 	}
 
