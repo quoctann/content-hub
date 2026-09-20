@@ -8,7 +8,7 @@ type CreateContentRequest struct {
 	OCRText  *string `json:"ocr_text"`
 	Caption  *string `json:"caption"`
 	Link     *string `json:"link"`
-	Type     string  `json:"type" binding:"required,oneof=text image"`
+	Type     string  `json:"type" binding:"required,oneof=text image video"`
 }
 
 type UpdateContentRequest struct {
@@ -17,7 +17,7 @@ type UpdateContentRequest struct {
 	OCRText  *string `json:"ocr_text"`
 	Caption  *string `json:"caption"`
 	Link     *string `json:"link"`
-	Type     *string `json:"type" binding:"omitempty,oneof=text image"`
+	Type     *string `json:"type" binding:"omitempty,oneof=text image video"`
 	IsHidden *bool   `json:"is_hidden"`
 }
 
@@ -36,7 +36,7 @@ type contentIDRequest struct {
 type SearchContentRequest struct {
 	Keywords  string `form:"keywords"`
 	MatchType string `form:"match_type" binding:"omitempty,oneof=and or"`
-	Type      string `form:"type" binding:"omitempty,oneof=text image"`
+	Type      string `form:"type" binding:"omitempty,oneof=text image video"`
 	Num       int64  `form:"num" binding:"omitempty,min=1,max=100"`
 	Cursor    string `form:"cursor"`
 }
@@ -46,7 +46,7 @@ type AdminListContentRequest struct {
 	PageSize  int64  `form:"page_size" binding:"omitempty,min=1,max=100"`
 	Keywords  string `form:"keywords"`
 	MatchType string `form:"match_type" binding:"omitempty,oneof=and or"`
-	Type      string `form:"type" binding:"omitempty,oneof=text image"`
+	Type      string `form:"type" binding:"omitempty,oneof=text image video"`
 	Visible   string `form:"visible" binding:"omitempty,oneof=true false"`
 }
 

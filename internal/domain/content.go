@@ -10,6 +10,7 @@ type ContentType string
 const (
 	Text  ContentType = "text"
 	Image ContentType = "image"
+	Video ContentType = "video"
 )
 
 type Content struct {
@@ -17,7 +18,7 @@ type Content struct {
 	Title     *string     `json:"title"`
 	TextData  *string     `json:"text_data"` // Available for text content
 	OCRText   *string     `json:"ocr_text"`  // Available for image content after OCR processing
-	Caption   *string     `json:"caption"`   // Available for image content
+	Caption   *string     `json:"caption"`   // Available for image/video content
 	Link      *string     `json:"link"`
 	FileName  *string     `json:"-"` // Internal use only
 	Type      ContentType `json:"type"`
@@ -36,7 +37,7 @@ type SearchFilter struct {
 	// MatchType is "and" or "or" (default "or"). Only meaningful when len(Keywords) > 1.
 	MatchType string
 
-	// ContentType restricts results to a specific media type ("text" or "image").
+	// ContentType restricts results to a specific media type ("text", "image", or "video").
 	// Empty means no restriction.
 	ContentType ContentType
 

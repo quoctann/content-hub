@@ -44,6 +44,7 @@ func NewAdminContentHandler(r server.Router, us domain.ContentUsecase, l logger.
 var validContentTypes = map[domain.ContentType]bool{
 	domain.Text:  true,
 	domain.Image: true,
+	domain.Video: true,
 }
 
 const maxInt64 = int64(1<<63 - 1)
@@ -70,7 +71,7 @@ func parseKeywords(kw string) []string {
 func parseContentType(typeStr string) (domain.ContentType, string) {
 	ct := domain.ContentType(typeStr)
 	if !validContentTypes[ct] {
-		return "", "invalid type: must be 'image' or 'text'"
+		return "", "invalid type: must be 'text', 'image', or 'video'"
 	}
 	return ct, ""
 }
@@ -91,7 +92,7 @@ func paginationOffset(page, pageSize int64) (int64, bool) {
 // @Produce      json
 // @Param        keywords   query     string  false  "Comma-separated keywords: hello,world"
 // @Param        match_type query     string  false  "Match type: and (all must match) or or (any match), default or"
-// @Param        type       query     string  false  "Content type filter (image, text)"
+// @Param        type       query     string  false  "Content type filter (image, text, video)"
 // @Param        num        query     int     false  "Number of results"
 // @Param        cursor     query     string  false  "Cursor for pagination"
 // @Success      200        {object}  ContentSearchResponseWrapper
@@ -251,7 +252,7 @@ func (h *ContentHandler) Update(c server.Context) {
 // @Param       page      query  int     false  "Page number (1-based)"
 // @Param       page_size query  int     false  "Items per page (default 20, max 100)"
 // @Param       keywords  query  string  false  "Comma-separated keywords: hello,world"
-// @Param       type      query  string  false  "Content type filter (image, text)"
+// @Param       type      query  string  false  "Content type filter (image, text, video)"
 // @Param       visible   query  string  false  "Visibility filter: true (visible only), false (hidden only), or empty (all)"
 // @Success    200      {object}  AdminContentResponseWrapper
 // @Failure    500      {object}  map[string]string
