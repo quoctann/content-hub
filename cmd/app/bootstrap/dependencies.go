@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/quoctann/content-hub/cmd/shared"
+	"github.com/quoctann/content-hub/internal/domain"
+	"github.com/quoctann/content-hub/internal/storage"
 	"github.com/quoctann/content-hub/pkg/config"
 	"github.com/quoctann/content-hub/pkg/database"
 	"github.com/quoctann/content-hub/pkg/logger"
@@ -15,9 +17,10 @@ import (
 )
 
 type Dependencies struct {
-	Logger logger.ILogger
-	Config *config.Config
-	DBPool *pgxpool.Pool
+	Logger     logger.ILogger
+	Config     *config.Config
+	DBPool     *pgxpool.Pool
+	MediaStore domain.MediaStore
 
 	shutdownTracing observability.Shutdown
 	closeOnce       sync.Once
@@ -54,10 +57,16 @@ func InitDependencies() (*Dependencies, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	var mediaStore domain.MediaStore
+	if cfg.Upload.Enabled {
+		mediaStore = storage.NewImageKitStore(cfg.Upload.ImageKitEndpoint, cfg.Upload.ImageKitPrivateKey, cfg.Upload.ImageKitFolder, cfg.Upload.Timeout)
+	}
+
 	return &Dependencies{
 		Logger:          l,
 		Config:          cfg,
 		DBPool:          dbPool,
+		MediaStore:      mediaStore,
 		shutdownTracing: shutdownTracing,
 	}, nil
 }

@@ -130,6 +130,10 @@ func (c *GinContext) Request() *http.Request {
 	return c.ctx.Request
 }
 
+func (c *GinContext) ResponseWriter() http.ResponseWriter {
+	return c.ctx.Writer
+}
+
 func (c *GinContext) SetHeader(key, value string) {
 	c.ctx.Header(key, value)
 }

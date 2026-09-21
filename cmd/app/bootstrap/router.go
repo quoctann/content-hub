@@ -35,12 +35,16 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 	httpDelivery.NewContentHandler(contentGroup, contentUsecase, deps.Logger)
 
 	// Protected routes (JWT auth + CSRF)
-	adminGroup := router.Group("/admin/contents")
+	adminGroup := router.Group("/admin")
 	adminGroup.Use(middleware.JWTAuth(middleware.JWTAuthConfig{
 		Secret: deps.Config.Security.JWTSecret,
 		Expiry: deps.Config.Security.JWTExpiry,
 		Issuer: "content-hub",
 	}))
 	adminGroup.Use(middleware.CSRFProtection())
-	httpDelivery.NewAdminContentHandler(adminGroup, contentUsecase, deps.Logger)
+	httpDelivery.NewAdminContentHandler(adminGroup.Group("/contents"), contentUsecase, deps.Logger)
+	
+	mediaGroup := adminGroup.Group("/media")
+	mediaGroup.Use(middleware.RateLimiter(rate.Every(time.Minute/12), 5))
+	httpDelivery.NewUploadHandler(mediaGroup, deps.MediaStore, deps.Config.Upload, deps.Logger)
 }

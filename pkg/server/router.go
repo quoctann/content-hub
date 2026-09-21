@@ -60,6 +60,8 @@ type Context interface {
 	Status(code int)
 	// Request returns the underlying *http.Request.
 	Request() *http.Request
+	// ResponseWriter returns the underlying response writer for bounded request bodies.
+	ResponseWriter() http.ResponseWriter
 	// SetHeader sets a response header.
 	SetHeader(key, value string)
 	// SetCookie sets a cookie in the response. Parameters mirror http.SetCookie
