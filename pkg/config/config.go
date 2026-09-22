@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -25,12 +26,25 @@ type Config struct {
 	Database      Database
 	Security      Security
 	Observability Observability
+	Upload        Upload
 }
 
 type Server struct {
-	Host   string `env:"SERVER_HOST"   envDefault:"0.0.0.0"`
-	Port   string `env:"SERVER_PORT"   envDefault:"8080"`
-	AppEnv string `env:"APP_ENV"       envDefault:"local"`
+	Host         string        `env:"SERVER_HOST"   envDefault:"0.0.0.0"`
+	Port         string        `env:"SERVER_PORT"   envDefault:"8080"`
+	AppEnv       string        `env:"APP_ENV"       envDefault:"local"`
+	ReadTimeout  time.Duration `env:"SERVER_READ_TIMEOUT" envDefault:"60s"`
+	WriteTimeout time.Duration `env:"SERVER_WRITE_TIMEOUT" envDefault:"150s"`
+}
+
+type Upload struct {
+	Enabled            bool          `env:"UPLOAD_ENABLED" envDefault:"false"`
+	MaxBatchFiles      int           `env:"UPLOAD_MAX_BATCH_FILES" envDefault:"5"`
+	MaxFileBytes       int64         `env:"UPLOAD_MAX_FILE_BYTES" envDefault:"10485760"`
+	Timeout            time.Duration `env:"UPLOAD_TIMEOUT" envDefault:"60s"`
+	ImageKitPrivateKey string        `env:"IMAGEKIT_PRIVATE_KEY"`
+	ImageKitFolder     string        `env:"IMAGEKIT_FOLDER" envDefault:"/content-hub"`
+	ImageKitEndpoint   string        `env:"IMAGEKIT_UPLOAD_ENDPOINT" envDefault:"https://upload.imagekit.io/api/v1/files/upload"`
 }
 
 type Logger struct {
@@ -87,6 +101,18 @@ func Load() (*Config, error) {
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
+	}
+	if cfg.Upload.Enabled {
+		if cfg.Upload.MaxBatchFiles < 1 || cfg.Upload.MaxFileBytes < 1 || cfg.Upload.Timeout <= 0 {
+			return nil, fmt.Errorf("upload configuration must use positive limits and timeout")
+		}
+		if cfg.Upload.ImageKitPrivateKey == "" {
+			return nil, fmt.Errorf("IMAGEKIT_PRIVATE_KEY is required when uploads are enabled")
+		}
+		endpoint, err := url.Parse(cfg.Upload.ImageKitEndpoint)
+		if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() != "upload.imagekit.io" {
+			return nil, fmt.Errorf("IMAGEKIT_UPLOAD_ENDPOINT must be an HTTPS ImageKit upload endpoint")
+		}
 	}
 	return cfg, nil
 }

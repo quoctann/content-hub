@@ -43,6 +43,8 @@ func NewApp() (*App, error) {
 			),
 		),
 		server.WithShutdownTimeout(30*time.Second),
+		server.WithReadTimeout(deps.Config.Server.ReadTimeout),
+		server.WithWriteTimeout(deps.Config.Server.WriteTimeout),
 		server.WithGinMode(ginMode),
 	)
 
