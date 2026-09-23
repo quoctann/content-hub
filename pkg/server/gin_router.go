@@ -130,6 +130,10 @@ func (c *GinContext) Request() *http.Request {
 	return c.ctx.Request
 }
 
+func (c *GinContext) ClientIP() string {
+	return c.ctx.ClientIP()
+}
+
 func (c *GinContext) ResponseWriter() http.ResponseWriter {
 	return c.ctx.Writer
 }

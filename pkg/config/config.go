@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -35,6 +37,12 @@ type Server struct {
 	AppEnv       string        `env:"APP_ENV"       envDefault:"local"`
 	ReadTimeout  time.Duration `env:"SERVER_READ_TIMEOUT" envDefault:"60s"`
 	WriteTimeout time.Duration `env:"SERVER_WRITE_TIMEOUT" envDefault:"150s"`
+
+	// TrustedProxies lists the proxy IPs/CIDRs whose X-Forwarded-For entries are
+	// trusted when resolving the client IP (rate limiting). Empty means trust no
+	// proxy and use the TCP peer address.
+	// Example: SERVER_TRUSTED_PROXIES=10.42.0.0/16
+	TrustedProxies []string `env:"SERVER_TRUSTED_PROXIES" envSeparator:","`
 }
 
 type Upload struct {
@@ -77,7 +85,9 @@ type Security struct {
 	// Example: SECURITY_ALLOW_ORIGINS=http://localhost:5173,http://localhost:3000
 	AllowedOrigins []string `env:"SECURITY_ALLOW_ORIGINS" envSeparator:","`
 
-	JWTSecret string        `env:"SECURITY_JWT_SECRET,required"`
+	// notEmpty matters: `required` alone accepts SECURITY_JWT_SECRET="" and would
+	// sign tokens with an empty HMAC key.
+	JWTSecret string        `env:"SECURITY_JWT_SECRET,required,notEmpty"`
 	JWTExpiry time.Duration `env:"SECURITY_JWT_EXPIRY" envDefault:"24h"`
 
 	// Content-Security-Policy directives. Leave empty to omit the header.
@@ -92,6 +102,9 @@ type Security struct {
 	CSPObjectSrc  string `env:"SECURITY_CSP_OBJECT_SRC"`
 }
 
+// minJWTSecretLength is the minimum HS256 key length (256 bits).
+const minJWTSecretLength = 32
+
 // Load parses all Config fields from the current environment variables.
 // For local development, call godotenv.Load(".env") before this function so
 // that the .env file populates the process environment first.
@@ -101,6 +114,15 @@ func Load() (*Config, error) {
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
+	}
+	if len(cfg.Security.JWTSecret) < minJWTSecretLength {
+		return nil, fmt.Errorf("SECURITY_JWT_SECRET must be at least %d characters", minJWTSecretLength)
+	}
+	cfg.Server.TrustedProxies = compact(cfg.Server.TrustedProxies)
+	for _, proxy := range cfg.Server.TrustedProxies {
+		if _, _, err := net.ParseCIDR(proxy); err != nil && net.ParseIP(proxy) == nil {
+			return nil, fmt.Errorf("SERVER_TRUSTED_PROXIES: %q is not an IP or CIDR", proxy)
+		}
 	}
 	if cfg.Upload.Enabled {
 		if cfg.Upload.MaxBatchFiles < 1 || cfg.Upload.MaxFileBytes < 1 || cfg.Upload.Timeout <= 0 {
@@ -115,4 +137,16 @@ func Load() (*Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// compact trims entries and drops blanks, so an empty or trailing-comma list
+// env var (e.g. SERVER_TRUSTED_PROXIES="") yields no entries.
+func compact(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

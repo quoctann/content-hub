@@ -48,13 +48,10 @@ func RateLimiter(r rate.Limit, b int) server.MiddlewareFunc {
 	}
 
 	return func(c server.Context) (server.Context, error) {
-		ip := c.Request().RemoteAddr
-		// TODO: For future deployment behind a trusted reverse proxy, consider
-		// validating X-Forwarded-For against a list of trusted proxy IPs to
-		// prevent IP spoofing and rate limit bypass
-		// if forwarded := c.Request().Header.Get("X-Forwarded-For"); forwarded != "" {
-		// 	ip = forwarded
-		// }
+		// Not RemoteAddr: it includes the ephemeral port (a new bucket per TCP
+		// connection) and behind nginx it is the proxy's IP, not the client's.
+		// ClientIP only trusts X-Forwarded-For from SERVER_TRUSTED_PROXIES.
+		ip := c.ClientIP()
 		if !getLimiter(ip).Allow() {
 			return nil, &server.HTTPError{Code: http.StatusTooManyRequests, Message: "too many requests"}
 		}

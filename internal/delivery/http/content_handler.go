@@ -15,13 +15,13 @@ type ContentHandler struct {
 	Logger   logger.ILogger
 }
 
+// NewContentHandler registers the public, read-only content routes.
+// Writes are only exposed through NewAdminContentHandler (JWT + CSRF).
 func NewContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogger) {
 	handler := &ContentHandler{
 		CUsecase: us,
 		Logger:   l,
 	}
-	r.POST("/contents", handler.Store)
-	r.PUT("/contents/:id", handler.Update)
 	r.GET("/contents", handler.Search)
 }
 
@@ -143,7 +143,7 @@ func (h *ContentHandler) Search(c server.Context) {
 // Store godoc
 // @Summary      Store content
 // @Description  Store a new content
-// @Tags         contents
+// @Tags         admin-contents
 // @Accept       json
 // @Produce      json
 // @Param        content  body      CreateContentRequest  true  "Content"
@@ -151,7 +151,7 @@ func (h *ContentHandler) Search(c server.Context) {
 // @Failure      400      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Security     ApiKeyAuth
-// @Router       /contents [post]
+// @Router       /admin/contents [post]
 func (h *ContentHandler) Store(c server.Context) {
 	var req CreateContentRequest
 	if err := c.Bind(&req); err != nil {
@@ -172,7 +172,7 @@ func (h *ContentHandler) Store(c server.Context) {
 // Update godoc
 // @Summary      Update content
 // @Description  Update existing content (supports partial updates)
-// @Tags         contents
+// @Tags         admin-contents
 // @Accept       json
 // @Produce      json
 // @Param        id       path      int                      true  "Content ID"
@@ -181,7 +181,7 @@ func (h *ContentHandler) Store(c server.Context) {
 // @Failure      400      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Security     ApiKeyAuth
-// @Router       /contents/{id} [put]
+// @Router       /admin/contents/{id} [put]
 func (h *ContentHandler) Update(c server.Context) {
 	var path contentIDRequest
 	if err := c.BindURI(&path); err != nil {

@@ -60,6 +60,9 @@ type Context interface {
 	Status(code int)
 	// Request returns the underlying *http.Request.
 	Request() *http.Request
+	// ClientIP returns the client IP (no port), honouring X-Forwarded-For only
+	// when the TCP peer is a configured trusted proxy.
+	ClientIP() string
 	// ResponseWriter returns the underlying response writer for bounded request bodies.
 	ResponseWriter() http.ResponseWriter
 	// SetHeader sets a response header.
