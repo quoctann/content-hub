@@ -1,12 +1,9 @@
--- If extensions already exist, move this to public
--- ALTER DATABASE db_name SET search_path TO tenant_a, public;
-
--- Always set fallback search_path to allow application code use without prefix public
--- Opt 1 - global set search_path: ALTER EXTENSION uuid-ossp SET SCHEMA public;
--- Opt 2 - application code setup whenever open connection: SET search_path = tenant_a, public;
+-- Tables are created unqualified: they land in the schema named by
+-- DATABASE_SCHEMA, which the app/migrator send as search_path and create
+-- beforehand (database.EnsureSchema). Extensions and shared functions live in
+-- public and are always referenced as public.<name>.
 
 CREATE SCHEMA IF NOT EXISTS public;
-CREATE SCHEMA IF NOT EXISTS content;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS "citext" WITH SCHEMA public;

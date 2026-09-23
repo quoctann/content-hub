@@ -1,9 +1,11 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/quoctann/content-hub/internal/database/migrator"
+	"github.com/quoctann/content-hub/pkg/database"
 )
 
 // RunMigrations checks the configuration and runs database migrations if enabled.
@@ -13,17 +15,9 @@ func RunMigrations(deps *Dependencies) error {
 	}
 
 	deps.Logger.InfoWithoutCtx("Running database migrations...")
-	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		deps.Config.Database.User,
-		deps.Config.Database.Password,
-		deps.Config.Database.Host,
-		deps.Config.Database.Port,
-		deps.Config.Database.Name,
-		deps.Config.Database.SSLMode,
-	)
-
-	if deps.Config.Database.Schema != "" {
-		dbURL = fmt.Sprintf("%s&search_path=%s", dbURL, deps.Config.Database.Schema)
+	// golang-migrate creates schema_migrations as soon as it connects.
+	if err := database.EnsureSchema(context.Background(), deps.Config.Database); err != nil {
+		return err
 	}
 
 	migrationsPath := deps.Config.Database.MigrationsPath
@@ -32,7 +26,7 @@ func RunMigrations(deps *Dependencies) error {
 	}
 
 	// Migrator handles the "file://" prefix logic internally
-	m, err := migrator.NewMigrator(dbURL, migrationsPath)
+	m, err := migrator.NewMigrator(database.URL(deps.Config.Database), migrationsPath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize migrator: %w", err)
 	}

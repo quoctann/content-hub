@@ -26,10 +26,10 @@ func (u *contentUsecase) Create(ctx context.Context, content *domain.Content) er
 	return u.contentRepo.Create(ctx, content)
 }
 
-func (u *contentUsecase) Update(ctx context.Context, content *domain.Content) error {
+func (u *contentUsecase) Update(ctx context.Context, id int64, patch domain.ContentPatch) (*domain.Content, error) {
 	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
 	defer cancel()
-	return u.contentRepo.Update(ctx, content)
+	return u.contentRepo.Update(ctx, id, patch)
 }
 
 func (u *contentUsecase) Delete(ctx context.Context, id int64) error {
