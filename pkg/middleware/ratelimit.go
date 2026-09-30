@@ -1,12 +1,15 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
+	"net/netip"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
 
+	"github.com/quoctann/content-hub/pkg/logger"
 	"github.com/quoctann/content-hub/pkg/server"
 )
 
@@ -48,13 +51,32 @@ func RateLimiter(r rate.Limit, b int) server.MiddlewareFunc {
 	}
 
 	return func(c server.Context) (server.Context, error) {
-		// Not RemoteAddr: it includes the ephemeral port (a new bucket per TCP
-		// connection) and behind nginx it is the proxy's IP, not the client's.
-		// ClientIP only trusts X-Forwarded-For from SERVER_TRUSTED_PROXIES.
-		ip := c.ClientIP()
+		ip := logger.ClientInfoFromContext(c.Request().Context()).IP
+		if ip == "" {
+			ip, _ = clientIP(c.Request())
+		}
 		if !getLimiter(ip).Allow() {
 			return nil, &server.HTTPError{Code: http.StatusTooManyRequests, Message: "too many requests"}
 		}
 		return c, nil
 	}
+}
+
+// clientIP uses the client IP supplied by Cloudflare through the tunnel.
+// This assumes the origin is reachable only through Cloudflare and intermediate
+// proxies preserve its header. For local or malformed requests, use the TCP peer.
+func clientIP(req *http.Request) (string, bool) {
+	if values := req.Header.Values("CF-Connecting-IP"); len(values) == 1 {
+		if ip, err := netip.ParseAddr(values[0]); err == nil {
+			return ip.Unmap().String(), true
+		}
+	}
+	peer, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		peer = req.RemoteAddr
+	}
+	if ip, err := netip.ParseAddr(peer); err == nil {
+		return ip.Unmap().String(), false
+	}
+	return peer, false
 }

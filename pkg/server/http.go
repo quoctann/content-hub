@@ -139,6 +139,16 @@ func addCorrelationFields(entry map[string]interface{}, ctx context.Context) {
 	if requestID := logger.RequestIDFromContext(ctx); requestID != "" {
 		entry["request_id"] = requestID
 	}
+	client := logger.ClientInfoFromContext(ctx)
+	if client.IP != "" {
+		entry["client_ip"] = client.IP
+	}
+	if client.Country != "" {
+		entry["cf_country"] = client.Country
+	}
+	if client.Ray != "" {
+		entry["cf_ray"] = client.Ray
+	}
 	if spanContext := trace.SpanContextFromContext(ctx); spanContext.IsValid() {
 		entry["trace_id"] = spanContext.TraceID().String()
 		entry["span_id"] = spanContext.SpanID().String()

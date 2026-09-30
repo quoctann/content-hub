@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -36,6 +35,7 @@ func NewApp() (*App, error) {
 		server.WithServiceName(deps.Config.Observability.OTelServiceName),
 		server.WithGinMiddleware(
 			middleware.RequestIDMiddleware(),
+			middleware.ClientInfoMiddleware(),
 			otelgin.Middleware(
 				deps.Config.Observability.OTelServiceName,
 				otelgin.WithFilter(func(request *http.Request) bool {
@@ -48,17 +48,6 @@ func NewApp() (*App, error) {
 		server.WithWriteTimeout(deps.Config.Server.WriteTimeout),
 		server.WithGinMode(ginMode),
 	)
-
-	// Gin trusts every proxy by default, which lets any caller spoof
-	// X-Forwarded-For and dodge rate limits; always set the list explicitly.
-	// X-Real-IP is dropped because the frontend nginx sets it to the ingress
-	// pod's IP rather than the client's.
-	engine := srv.Engine()
-	engine.RemoteIPHeaders = []string{"X-Forwarded-For"}
-	if err := engine.SetTrustedProxies(deps.Config.Server.TrustedProxies); err != nil {
-		deps.Close()
-		return nil, fmt.Errorf("invalid trusted proxies: %w", err)
-	}
 
 	app := &App{
 		deps:   deps,

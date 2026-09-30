@@ -34,38 +34,3 @@ func TestLoadJWTSecret(t *testing.T) {
 		})
 	}
 }
-
-func TestLoadTrustedProxies(t *testing.T) {
-	tests := []struct {
-		name    string
-		value   string
-		want    []string
-		wantErr bool
-	}{
-		{name: "empty means none", value: "", want: []string{}},
-		{name: "cidr and ip with blanks", value: " 10.42.0.0/16, ,10.0.0.1,", want: []string{"10.42.0.0/16", "10.0.0.1"}},
-		{name: "garbage is rejected", value: "not-an-ip", wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("DATABASE_PASSWORD", "x")
-			t.Setenv("SECURITY_JWT_SECRET", strings.Repeat("a", 32))
-			t.Setenv("SERVER_TRUSTED_PROXIES", tt.value)
-
-			cfg, err := Load()
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("Load() error = nil, want error")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Load() error = %v", err)
-			}
-			if strings.Join(cfg.Server.TrustedProxies, "|") != strings.Join(tt.want, "|") {
-				t.Fatalf("TrustedProxies = %q, want %q", cfg.Server.TrustedProxies, tt.want)
-			}
-		})
-	}
-}

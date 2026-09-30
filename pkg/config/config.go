@@ -2,25 +2,12 @@ package config
 
 import (
 	"fmt"
-	"net"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
 )
-
-/*
-
-Local development: place a .env file next to the binary (or in the working
-directory). cmd/shared.LoadConfig calls godotenv.Load before parsing, so
-the .env file takes effect automatically.
-
-Production / Kubernetes: inject env vars directly (ConfigMap, Secret, etc.).
-No YAML files are needed.
-
-*/
 
 type Config struct {
 	Server        Server
@@ -37,12 +24,6 @@ type Server struct {
 	AppEnv       string        `env:"APP_ENV"       envDefault:"local"`
 	ReadTimeout  time.Duration `env:"SERVER_READ_TIMEOUT" envDefault:"60s"`
 	WriteTimeout time.Duration `env:"SERVER_WRITE_TIMEOUT" envDefault:"150s"`
-
-	// TrustedProxies lists the proxy IPs/CIDRs whose X-Forwarded-For entries are
-	// trusted when resolving the client IP (rate limiting). Empty means trust no
-	// proxy and use the TCP peer address.
-	// Example: SERVER_TRUSTED_PROXIES=10.42.0.0/16
-	TrustedProxies []string `env:"SERVER_TRUSTED_PROXIES" envSeparator:","`
 }
 
 type Upload struct {
@@ -118,12 +99,6 @@ func Load() (*Config, error) {
 	if len(cfg.Security.JWTSecret) < minJWTSecretLength {
 		return nil, fmt.Errorf("SECURITY_JWT_SECRET must be at least %d characters", minJWTSecretLength)
 	}
-	cfg.Server.TrustedProxies = compact(cfg.Server.TrustedProxies)
-	for _, proxy := range cfg.Server.TrustedProxies {
-		if _, _, err := net.ParseCIDR(proxy); err != nil && net.ParseIP(proxy) == nil {
-			return nil, fmt.Errorf("SERVER_TRUSTED_PROXIES: %q is not an IP or CIDR", proxy)
-		}
-	}
 	if cfg.Upload.Enabled {
 		if cfg.Upload.MaxBatchFiles < 1 || cfg.Upload.MaxFileBytes < 1 || cfg.Upload.Timeout <= 0 {
 			return nil, fmt.Errorf("upload configuration must use positive limits and timeout")
@@ -137,16 +112,4 @@ func Load() (*Config, error) {
 		}
 	}
 	return cfg, nil
-}
-
-// compact trims entries and drops blanks, so an empty or trailing-comma list
-// env var (e.g. SERVER_TRUSTED_PROXIES="") yields no entries.
-func compact(values []string) []string {
-	out := make([]string, 0, len(values))
-	for _, v := range values {
-		if trimmed := strings.TrimSpace(v); trimmed != "" {
-			out = append(out, trimmed)
-		}
-	}
-	return out
 }
