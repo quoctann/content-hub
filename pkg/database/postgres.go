@@ -15,25 +15,10 @@ import (
 )
 
 func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool, error) {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Database.Host,
-		cfg.Database.Port,
-		cfg.Database.User,
-		cfg.Database.Password,
-		cfg.Database.Name,
-		cfg.Database.SSLMode,
-	)
-
-	poolConfig, err := pgxpool.ParseConfig(dsn)
+	// URL carries search_path when a schema is configured, same as the migrator.
+	poolConfig, err := pgxpool.ParseConfig(URL(cfg.Database))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
-	}
-
-	if cfg.Database.Schema != "" {
-		poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-			_, err := conn.Exec(ctx, "SET search_path TO "+pgx.Identifier{cfg.Database.Schema}.Sanitize())
-			return err
-		}
 	}
 
 	// Set some reasonable defaults
@@ -92,4 +77,24 @@ func NewPostgresConnection(cfg *config.Config, l logger.ILogger) (*pgxpool.Pool,
 	)
 
 	return pool, nil
+}
+
+// EnsureSchema creates the configured schema if it does not exist yet. The
+// migrations do not qualify table names (they rely on search_path), and
+// golang-migrate keeps its schema_migrations table there too, so the schema
+// must exist before the first migration runs on a fresh database.
+func EnsureSchema(ctx context.Context, cfg config.Database) error {
+	if cfg.Schema == "" {
+		return nil
+	}
+	conn, err := pgx.Connect(ctx, URL(cfg))
+	if err != nil {
+		return fmt.Errorf("connect to create schema: %w", err)
+	}
+	defer conn.Close(ctx)
+
+	if _, err := conn.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{cfg.Schema}.Sanitize()); err != nil {
+		return fmt.Errorf("create schema %q: %w", cfg.Schema, err)
+	}
+	return nil
 }

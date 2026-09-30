@@ -1,11 +1,12 @@
 package bootstrap
 
 import (
-	"fmt"
+	"context"
 
 	"github.com/quoctann/content-hub/cmd/shared"
 	"github.com/quoctann/content-hub/internal/database/migrator"
 	"github.com/quoctann/content-hub/internal/domain"
+	"github.com/quoctann/content-hub/pkg/database"
 )
 
 func InitMigrator(migrationsPath string) (domain.Migrator, error) {
@@ -18,20 +19,12 @@ func InitMigrator(migrationsPath string) (domain.Migrator, error) {
 		migrationsPath = cfg.Database.MigrationsPath
 	}
 
-	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		cfg.Database.User,
-		cfg.Database.Password,
-		cfg.Database.Host,
-		cfg.Database.Port,
-		cfg.Database.Name,
-		cfg.Database.SSLMode,
-	)
-
-	if cfg.Database.Schema != "" {
-		dbURL = fmt.Sprintf("%s&search_path=%s", dbURL, cfg.Database.Schema)
+	// golang-migrate creates schema_migrations as soon as it connects.
+	if err := database.EnsureSchema(context.Background(), cfg.Database); err != nil {
+		return nil, err
 	}
 
-	return migrator.NewMigrator(dbURL, migrationsPath)
+	return migrator.NewMigrator(database.URL(cfg.Database), migrationsPath)
 }
 
 func InitMigrationCreator() domain.MigrationCreator {

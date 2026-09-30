@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/quoctann/content-hub/internal/domain"
 )
@@ -39,35 +41,66 @@ func (r *contentRepo) Create(ctx context.Context, c *domain.Content) error {
 	return tx.Commit(ctx)
 }
 
-func (r *contentRepo) Update(ctx context.Context, c *domain.Content) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
+// contentColumns is the column list shared by single-row reads so Scan order
+// stays in one place.
+const contentColumns = "id, title, text_data, ocr_text, caption, link, type, is_hidden, created_at, updated_at"
 
-	query := `
-		UPDATE content SET
-			title = $1,
-			text_data = $2,
-			ocr_text = $3,
-			caption = $4,
-			link = $5,
-			file_name = $6,
-			type = $7,
-			is_hidden = $8,
-			updated_at = NOW()
-		WHERE id = $9 AND deleted_at IS NULL
-	`
-	tag, err := tx.Exec(ctx, query, c.Title, c.TextData, c.OCRText, c.Caption, c.Link, c.FileName, c.Type, c.IsHidden, c.ID)
-	if err != nil {
-		return fmt.Errorf("failed to update content: %w", err)
+func scanContent(row pgx.Row) (*domain.Content, error) {
+	var c domain.Content
+	if err := row.Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.IsHidden, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("content not found")
+	return &c, nil
+}
+
+// Update writes only the columns set in patch, in a single statement, so it
+// neither clobbers columns the caller did not send (file_name, concurrent
+// edits to other fields) nor needs a read-modify-write round trip.
+func (r *contentRepo) Update(ctx context.Context, id int64, patch domain.ContentPatch) (*domain.Content, error) {
+	var sets []string
+	var args []any
+	set := func(column string, value any) {
+		args = append(args, value)
+		sets = append(sets, fmt.Sprintf("%s = $%d", column, len(args)))
+	}
+	if patch.Title.Set {
+		set("title", patch.Title.Value)
+	}
+	if patch.TextData.Set {
+		set("text_data", patch.TextData.Value)
+	}
+	if patch.OCRText.Set {
+		set("ocr_text", patch.OCRText.Value)
+	}
+	if patch.Caption.Set {
+		set("caption", patch.Caption.Value)
+	}
+	if patch.Link.Set {
+		set("link", patch.Link.Value)
+	}
+	if patch.Type.Set {
+		set("type", patch.Type.Value)
+	}
+	if patch.IsHidden.Set {
+		set("is_hidden", patch.IsHidden.Value)
+	}
+	if len(sets) == 0 {
+		return r.GetByID(ctx, id)
 	}
 
-	return tx.Commit(ctx)
+	args = append(args, id)
+	query := fmt.Sprintf(
+		"UPDATE content SET %s, updated_at = NOW() WHERE id = $%d AND deleted_at IS NULL RETURNING %s",
+		strings.Join(sets, ", "), len(args), contentColumns,
+	)
+	c, err := scanContent(r.db.QueryRow(ctx, query, args...))
+	if err != nil {
+		return nil, fmt.Errorf("failed to update content: %w", err)
+	}
+	return c, nil
 }
 
 func (r *contentRepo) Delete(ctx context.Context, id int64) error {
@@ -77,7 +110,7 @@ func (r *contentRepo) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("failed to soft-delete content: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("content not found or already deleted")
+		return fmt.Errorf("failed to soft-delete content %d: %w", id, domain.ErrNotFound)
 	}
 	return nil
 }
@@ -95,17 +128,12 @@ func (r *contentRepo) DeleteMany(ctx context.Context, ids []int64) error {
 }
 
 func (r *contentRepo) GetByID(ctx context.Context, id int64) (*domain.Content, error) {
-	query := `
-		SELECT id, title, text_data, ocr_text, caption, link, type, is_hidden, created_at, updated_at
-		FROM content
-		WHERE id = $1 AND deleted_at IS NULL
-	`
-	var c domain.Content
-	err := r.db.QueryRow(ctx, query, id).Scan(&c.ID, &c.Title, &c.TextData, &c.OCRText, &c.Caption, &c.Link, &c.Type, &c.IsHidden, &c.CreatedAt, &c.UpdatedAt)
+	query := "SELECT " + contentColumns + " FROM content WHERE id = $1 AND deleted_at IS NULL"
+	c, err := scanContent(r.db.QueryRow(ctx, query, id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get content: %w", err)
 	}
-	return &c, nil
+	return c, nil
 }
 
 func (r *contentRepo) SetHidden(ctx context.Context, id int64, hidden bool) error {
@@ -115,7 +143,7 @@ func (r *contentRepo) SetHidden(ctx context.Context, id int64, hidden bool) erro
 		return fmt.Errorf("failed to set hidden: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("content not found")
+		return fmt.Errorf("failed to set hidden on content %d: %w", id, domain.ErrNotFound)
 	}
 	return nil
 }

@@ -35,6 +35,7 @@ func NewApp() (*App, error) {
 		server.WithServiceName(deps.Config.Observability.OTelServiceName),
 		server.WithGinMiddleware(
 			middleware.RequestIDMiddleware(),
+			middleware.ClientInfoMiddleware(),
 			otelgin.Middleware(
 				deps.Config.Observability.OTelServiceName,
 				otelgin.WithFilter(func(request *http.Request) bool {

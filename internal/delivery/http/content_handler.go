@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,13 +16,13 @@ type ContentHandler struct {
 	Logger   logger.ILogger
 }
 
+// NewContentHandler registers the public, read-only content routes.
+// Writes are only exposed through NewAdminContentHandler (JWT + CSRF).
 func NewContentHandler(r server.Router, us domain.ContentUsecase, l logger.ILogger) {
 	handler := &ContentHandler{
 		CUsecase: us,
 		Logger:   l,
 	}
-	r.POST("/contents", handler.Store)
-	r.PUT("/contents/:id", handler.Update)
 	r.GET("/contents", handler.Search)
 }
 
@@ -51,6 +52,17 @@ const maxInt64 = int64(1<<63 - 1)
 
 func invalidRequest(c server.Context, err error) {
 	c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+}
+
+// contentError maps usecase errors to responses: 404 only for a missing row,
+// 500 (logged) for everything else, so a DB outage is not reported as "not found".
+func (h *ContentHandler) contentError(c server.Context, err error, msg string) {
+	if errors.Is(err, domain.ErrNotFound) {
+		c.JSON(http.StatusNotFound, map[string]string{"error": "content not found"})
+		return
+	}
+	h.Logger.Error(c.Request().Context(), msg, logger.Error(err))
+	c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 }
 
 func parseKeywords(kw string) []string {
@@ -143,7 +155,7 @@ func (h *ContentHandler) Search(c server.Context) {
 // Store godoc
 // @Summary      Store content
 // @Description  Store a new content
-// @Tags         contents
+// @Tags         admin-contents
 // @Accept       json
 // @Produce      json
 // @Param        content  body      CreateContentRequest  true  "Content"
@@ -151,7 +163,7 @@ func (h *ContentHandler) Search(c server.Context) {
 // @Failure      400      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Security     ApiKeyAuth
-// @Router       /contents [post]
+// @Router       /admin/contents [post]
 func (h *ContentHandler) Store(c server.Context) {
 	var req CreateContentRequest
 	if err := c.Bind(&req); err != nil {
@@ -172,16 +184,17 @@ func (h *ContentHandler) Store(c server.Context) {
 // Update godoc
 // @Summary      Update content
 // @Description  Update existing content (supports partial updates)
-// @Tags         contents
+// @Tags         admin-contents
 // @Accept       json
 // @Produce      json
 // @Param        id       path      int                      true  "Content ID"
 // @Param        content  body      UpdateContentRequest  true  "Content (partial fields allowed)"
 // @Success      200      {object}  ContentResponse
 // @Failure      400      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Security     ApiKeyAuth
-// @Router       /contents/{id} [put]
+// @Router       /admin/contents/{id} [put]
 func (h *ContentHandler) Update(c server.Context) {
 	var path contentIDRequest
 	if err := c.BindURI(&path); err != nil {
@@ -196,51 +209,13 @@ func (h *ContentHandler) Update(c server.Context) {
 		return
 	}
 
-	// Fetch the current content to merge updates
-	existing, err := h.CUsecase.GetByID(c.Request().Context(), id)
+	updated, err := h.CUsecase.Update(c.Request().Context(), id, req.ToPatch())
 	if err != nil {
-		h.Logger.Error(c.Request().Context(), "failed to fetch existing content", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		h.contentError(c, err, "failed to update content")
 		return
 	}
 
-	// Merge: only update fields that are provided in the request
-	if req.Title != nil {
-		existing.Title = req.Title
-	}
-	if req.TextData != nil {
-		existing.TextData = req.TextData
-	}
-	if req.OCRText != nil {
-		existing.OCRText = req.OCRText
-	}
-	if req.Caption != nil {
-		existing.Caption = req.Caption
-	}
-	if req.Link != nil {
-		existing.Link = req.Link
-	}
-	if req.Type != nil {
-		existing.Type = domain.ContentType(*req.Type)
-	}
-	if req.IsHidden != nil {
-		existing.IsHidden = *req.IsHidden
-	}
-
-	if err := h.CUsecase.Update(c.Request().Context(), existing); err != nil {
-		h.Logger.Error(c.Request().Context(), "failed to update content", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-		return
-	}
-
-	updatedContent, err := h.CUsecase.GetByID(c.Request().Context(), id)
-	if err != nil {
-		h.Logger.Error(c.Request().Context(), "failed to fetch updated content", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-		return
-	}
-
-	c.JSON(http.StatusOK, ToContentResponse(updatedContent))
+	c.JSON(http.StatusOK, ToContentResponse(updated))
 }
 
 // AdminList godoc
@@ -336,8 +311,7 @@ func (h *ContentHandler) GetByID(c server.Context) {
 
 	content, err := h.CUsecase.GetByID(c.Request().Context(), id)
 	if err != nil {
-		h.Logger.Error(c.Request().Context(), "failed to get content", logger.Error(err))
-		c.JSON(http.StatusNotFound, map[string]string{"error": "content not found"})
+		h.contentError(c, err, "failed to get content")
 		return
 	}
 
@@ -366,8 +340,7 @@ func (h *ContentHandler) Delete(c server.Context) {
 	id := path.ID
 
 	if err := h.CUsecase.Delete(c.Request().Context(), id); err != nil {
-		h.Logger.Error(c.Request().Context(), "failed to delete content", logger.Error(err))
-		c.JSON(http.StatusNotFound, map[string]string{"error": "content not found"})
+		h.contentError(c, err, "failed to delete content")
 		return
 	}
 
@@ -403,15 +376,13 @@ func (h *ContentHandler) ToggleHide(c server.Context) {
 	}
 
 	if err := h.CUsecase.SetHidden(c.Request().Context(), id, *req.Hidden); err != nil {
-		h.Logger.Error(c.Request().Context(), "failed to toggle hide", logger.Error(err))
-		c.JSON(http.StatusNotFound, map[string]string{"error": "content not found"})
+		h.contentError(c, err, "failed to toggle hide")
 		return
 	}
 
 	content, err := h.CUsecase.GetByID(c.Request().Context(), id)
 	if err != nil {
-		h.Logger.Error(c.Request().Context(), "failed to get content after toggle", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		h.contentError(c, err, "failed to get content after toggle")
 		return
 	}
 

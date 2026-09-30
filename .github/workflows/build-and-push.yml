@@ -11,8 +11,59 @@ env:
   IMAGE_NAMESPACE: ${{ github.repository_owner }}
 
 jobs:
+  test:
+    name: Test & Migration Round Trip
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine # keep in sync with content-gitops/postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      DATABASE_HOST: localhost
+      DATABASE_PORT: "5432"
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: postgres
+      DATABASE_SCHEMA: meme # same as prod
+      SECURITY_JWT_SECRET: ci-only-secret-at-least-32-characters-long
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      # Includes repository integration tests (enabled by TEST_DATABASE_URL).
+      - name: Test
+        run: go test -race -count=1 ./...
+
+      # Every down migration must run, so a failed deploy can actually be rolled back.
+      - name: Migration round trip (up -> down all -> up)
+        run: |
+          go build -o /tmp/dbcli ./cmd/db
+          /tmp/dbcli up
+          for _ in migrations/*.up.sql; do /tmp/dbcli down; done
+          /tmp/dbcli up
+
   build:
     name: Build & Push Images
+    needs: test
     runs-on: ubuntu-latest
 
     permissions:

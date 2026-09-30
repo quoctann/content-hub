@@ -174,7 +174,26 @@ const RequestIDKey = "request_id"
 
 type contextKey string
 
-const requestIDContextKey contextKey = RequestIDKey
+const (
+	requestIDContextKey  contextKey = RequestIDKey
+	clientInfoContextKey contextKey = "client_info"
+)
+
+// ClientInfo contains the validated client address and optional Cloudflare metadata.
+type ClientInfo struct {
+	IP      string
+	Country string
+	Ray     string
+}
+
+func WithClientInfo(ctx context.Context, info ClientInfo) context.Context {
+	return context.WithValue(ctx, clientInfoContextKey, info)
+}
+
+func ClientInfoFromContext(ctx context.Context) ClientInfo {
+	info, _ := ctx.Value(clientInfoContextKey).(ClientInfo)
+	return info
+}
 
 // WithRequestID adds a request ID to a context for structured logging.
 func WithRequestID(ctx context.Context, requestID string) context.Context {
@@ -196,6 +215,16 @@ func extractTraceInfo(ctx context.Context) []Field {
 
 	if reqID := RequestIDFromContext(ctx); reqID != "" {
 		fields = append(fields, String("request_id", reqID))
+	}
+	client := ClientInfoFromContext(ctx)
+	if client.IP != "" {
+		fields = append(fields, String("client_ip", client.IP))
+	}
+	if client.Country != "" {
+		fields = append(fields, String("cf_country", client.Country))
+	}
+	if client.Ray != "" {
+		fields = append(fields, String("cf_ray", client.Ray))
 	}
 	if spanContext := trace.SpanContextFromContext(ctx); spanContext.IsValid() {
 		fields = append(fields,

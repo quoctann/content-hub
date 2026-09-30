@@ -1,1 +1,1 @@
-ALTER TABLE content.content DROP COLUMN IF EXISTS is_hidden;
+ALTER TABLE content DROP COLUMN IF EXISTS is_hidden;

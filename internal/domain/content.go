@@ -66,9 +66,23 @@ type ContentSearchResult struct {
 	Pagination PaginationMeta
 }
 
+// ContentPatch is a partial update. Only fields with Set == true are written;
+// a set nullable field whose Value is nil clears the column. Columns not
+// listed here (e.g. file_name) are never touched by an update.
+type ContentPatch struct {
+	Title    Optional[*string]
+	TextData Optional[*string]
+	OCRText  Optional[*string]
+	Caption  Optional[*string]
+	Link     Optional[*string]
+	Type     Optional[ContentType]
+	IsHidden Optional[bool]
+}
+
 type ContentRepository interface {
 	Create(ctx context.Context, content *Content) error
-	Update(ctx context.Context, content *Content) error
+	// Update applies patch and returns the updated row, or ErrNotFound.
+	Update(ctx context.Context, id int64, patch ContentPatch) (*Content, error)
 	Delete(ctx context.Context, id int64) error
 	DeleteMany(ctx context.Context, ids []int64) error
 	GetByID(ctx context.Context, id int64) (*Content, error)
@@ -78,7 +92,7 @@ type ContentRepository interface {
 
 type ContentUsecase interface {
 	Create(ctx context.Context, content *Content) error
-	Update(ctx context.Context, content *Content) error
+	Update(ctx context.Context, id int64, patch ContentPatch) (*Content, error)
 	Delete(ctx context.Context, id int64) error
 	DeleteMany(ctx context.Context, ids []int64) error
 	GetByID(ctx context.Context, id int64) (*Content, error)

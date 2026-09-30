@@ -1,13 +1,20 @@
 Postgres naming convention
 
 Schemas:
-- Use domain schemas: auth, content, billing, audit.
-- Use shared for reusable custom functions/triggers.
-- Keep public for extensions only unless there is a good reason.
+- Application tables live in the schema set by DATABASE_SCHEMA (prod: meme).
+  The app and the migrator both send it as search_path and create it if missing,
+  so migrations must NOT qualify table/index/trigger targets (write `content`,
+  not `meme.content`). Renaming the schema is then a config change, not a
+  migration edit.
+- Keep public for extensions and shared functions/triggers.
 
 General:
-- Always schema-qualify shared functions and extension functions in migrations.
-- Do not rely on search_path in migrations or function bodies.
+- Always schema-qualify shared functions and extension functions (public.unaccent,
+  public.trg_update_updated_at). Built-in SQL constructs are never qualified
+  (coalesce, not public.coalesce).
+- Function bodies must pin their own search_path (SET search_path = public).
+- Never edit a migration that has already been applied anywhere; add a new one.
+  Every .down.sql must actually run: CI applies up -> down -all -> up.
 - Use snake_case only.
 - Avoid generic names such as handle, process, update, uuid.
 

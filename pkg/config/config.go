@@ -9,17 +9,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-/*
-
-Local development: place a .env file next to the binary (or in the working
-directory). cmd/shared.LoadConfig calls godotenv.Load before parsing, so
-the .env file takes effect automatically.
-
-Production / Kubernetes: inject env vars directly (ConfigMap, Secret, etc.).
-No YAML files are needed.
-
-*/
-
 type Config struct {
 	Server        Server
 	Logger        Logger
@@ -77,7 +66,9 @@ type Security struct {
 	// Example: SECURITY_ALLOW_ORIGINS=http://localhost:5173,http://localhost:3000
 	AllowedOrigins []string `env:"SECURITY_ALLOW_ORIGINS" envSeparator:","`
 
-	JWTSecret string        `env:"SECURITY_JWT_SECRET,required"`
+	// notEmpty matters: `required` alone accepts SECURITY_JWT_SECRET="" and would
+	// sign tokens with an empty HMAC key.
+	JWTSecret string        `env:"SECURITY_JWT_SECRET,required,notEmpty"`
 	JWTExpiry time.Duration `env:"SECURITY_JWT_EXPIRY" envDefault:"24h"`
 
 	// Content-Security-Policy directives. Leave empty to omit the header.
@@ -92,6 +83,9 @@ type Security struct {
 	CSPObjectSrc  string `env:"SECURITY_CSP_OBJECT_SRC"`
 }
 
+// minJWTSecretLength is the minimum HS256 key length (256 bits).
+const minJWTSecretLength = 32
+
 // Load parses all Config fields from the current environment variables.
 // For local development, call godotenv.Load(".env") before this function so
 // that the .env file populates the process environment first.
@@ -101,6 +95,9 @@ func Load() (*Config, error) {
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
+	}
+	if len(cfg.Security.JWTSecret) < minJWTSecretLength {
+		return nil, fmt.Errorf("SECURITY_JWT_SECRET must be at least %d characters", minJWTSecretLength)
 	}
 	if cfg.Upload.Enabled {
 		if cfg.Upload.MaxBatchFiles < 1 || cfg.Upload.MaxFileBytes < 1 || cfg.Upload.Timeout <= 0 {

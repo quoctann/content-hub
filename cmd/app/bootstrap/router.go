@@ -29,9 +29,8 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 	loginGroup.Use(middleware.RateLimiter(rate.Every(time.Minute/5), 5))
 	httpDelivery.NewAccountHandler(loginGroup, accountUsecase, deps.Config, deps.Logger)
 
-	// Protected content routes
+	// Public, read-only content routes (search only; writes live under /admin)
 	contentGroup := router.Group("/")
-	// contentGroup.Use(middleware.APIKeyAuth(deps.Config.Security.APIKey))
 	httpDelivery.NewContentHandler(contentGroup, contentUsecase, deps.Logger)
 
 	// Protected routes (JWT auth + CSRF)
@@ -43,8 +42,10 @@ func SetupRouter(router server.Router, deps *Dependencies) {
 	}))
 	adminGroup.Use(middleware.CSRFProtection())
 	httpDelivery.NewAdminContentHandler(adminGroup.Group("/contents"), contentUsecase, deps.Logger)
-	
+
 	mediaGroup := adminGroup.Group("/media")
-	mediaGroup.Use(middleware.RateLimiter(rate.Every(time.Minute/12), 5))
+	// Burst covers one full batch plus the GET /limits call the upload dialog
+	// makes first; before the limiter keyed on the real client IP it never fired.
+	mediaGroup.Use(middleware.RateLimiter(rate.Every(time.Minute/12), deps.Config.Upload.MaxBatchFiles+1))
 	httpDelivery.NewUploadHandler(mediaGroup, deps.MediaStore, deps.Config.Upload, deps.Logger)
 }
